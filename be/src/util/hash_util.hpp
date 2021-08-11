@@ -376,7 +376,7 @@ struct hash<doris::TNetworkAddress> {
     }
 };
 
-#if !defined(IR_COMPILE) && __GNUC__ < 6 && !defined(__clang__)
+#if !defined(IR_COMPILE) && __GNUC__ < 6
 // Cause this is builtin function
 template <>
 struct hash<__int128> {

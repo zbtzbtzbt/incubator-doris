@@ -299,10 +299,8 @@ public:
             auto iter = _runtime_filters.find(i);
             if (iter != _runtime_filters.end()) {
                 void* val = _build_expr_context[i]->get_value(row);
-                if (val != nullptr) {
-                    for (auto filter : iter->second) {
-                        filter->insert(val);
-                    }
+                for (auto filter : iter->second) {
+                    filter->insert(val);
                 }
             }
         }

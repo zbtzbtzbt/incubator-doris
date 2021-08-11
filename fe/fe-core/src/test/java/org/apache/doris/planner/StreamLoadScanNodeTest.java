@@ -340,7 +340,7 @@ public class StreamLoadScanNodeTest {
 
         new Expectations() {{
             catalog.getFunction((Function) any, (Function.CompareMode) any);
-            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), Type.BIGINT, false, true);
+            result = new ScalarFunction(new FunctionName(FunctionSet.HLL_HASH), Lists.newArrayList(), Type.BIGINT, false);
         }};
         
         new Expectations() {
@@ -390,7 +390,7 @@ public class StreamLoadScanNodeTest {
         new Expectations() {
             {
                 catalog.getFunction((Function) any, (Function.CompareMode) any);
-                result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), Type.BIGINT, false, true);
+                result = new ScalarFunction(new FunctionName("hll_hash1"), Lists.newArrayList(), Type.BIGINT, false);
                 minTimes = 0;
             }
         };

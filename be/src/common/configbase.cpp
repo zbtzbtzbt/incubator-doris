@@ -22,6 +22,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <sstream>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
@@ -255,10 +256,6 @@ void Properties::set(const std::string& key, const std::string& val) {
     file_conf_map.emplace(key, val);
 }
 
-void Properties::set_force(const std::string& key, const std::string& val) {
-    file_conf_map[key] = val;
-}
-
 bool Properties::dump(const std::string& conffile) {
     std::vector<std::string> files = {conffile};
     Status st = FileSystemUtil::remove_paths(files);
@@ -390,14 +387,19 @@ bool persist_config(const std::string& field, const std::string& value) {
     std::lock_guard<std::mutex> l(custom_conf_lock);
 
     static const string conffile = string(getenv("DORIS_HOME")) + "/conf/be_custom.conf";
+    Status st = FileSystemUtil::create_file(conffile);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to create or open be_custom.conf. " << st.get_error_msg();
+        return false;
+    }
 
     Properties tmp_props;
-    if (!tmp_props.load(conffile.c_str(), false)) {
+    if (!tmp_props.load(conffile.c_str())) {
         LOG(WARNING) << "failed to load " << conffile;
         return false;
     }
 
-    tmp_props.set_force(field, value);
+    tmp_props.set(field, value);
     return tmp_props.dump(conffile);
 }
 
@@ -428,27 +430,6 @@ Status set_config(const std::string& field, const std::string& value, bool need_
 }
 
 std::mutex* get_mutable_string_config_lock() { return &mutable_string_config_lock; }
-
-std::vector<std::vector<std::string>> get_config_info() {
-    std::vector<std::vector<std::string>> configs;
-    std::lock_guard<std::mutex> lock(mutable_string_config_lock);
-    for (const auto& it : *full_conf_map) {
-        auto field_it = Register::_s_field_map->find(it.first);
-        if (field_it == Register::_s_field_map->end()) {
-            continue;
-        }
-
-        std::vector<std::string> _config;
-        _config.push_back(it.first);
-
-        _config.push_back(field_it->second.type);
-        _config.push_back(it.second);
-        _config.push_back(field_it->second.valmutable ? "true":"false");
-
-        configs.push_back(_config);
-    }
-    return configs;
-}
 
 } // namespace config
 } // namespace doris

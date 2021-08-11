@@ -19,7 +19,6 @@ package org.apache.doris.analysis;
 
 import org.apache.doris.catalog.AggregateFunction;
 import org.apache.doris.catalog.ArrayType;
-import org.apache.doris.catalog.AliasFunction;
 import org.apache.doris.catalog.Catalog;
 import org.apache.doris.catalog.Database;
 import org.apache.doris.catalog.Function;
@@ -30,7 +29,6 @@ import org.apache.doris.catalog.Type;
 import org.apache.doris.common.AnalysisException;
 import org.apache.doris.common.ErrorCode;
 import org.apache.doris.common.ErrorReport;
-import org.apache.doris.common.util.VectorizedUtil;
 import org.apache.doris.mysql.privilege.PrivPredicate;
 import org.apache.doris.qe.ConnectContext;
 import org.apache.doris.thrift.TAggregateExpr;
@@ -51,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 
 // TODO: for aggregations, we need to unify the code paths for builtins and UDAs.
@@ -74,11 +71,6 @@ public class FunctionCallExpr extends Expr {
                     .add("stddev").add("stddev_val").add("stddev_samp")
                     .add("variance").add("variance_pop").add("variance_pop").add("var_samp").add("var_pop").build();
     private static final String ELEMENT_EXTRACT_FN_NAME = "%element_extract%";
-    
-    // Save the functionCallExpr in the original statement
-    private Expr originStmtFnExpr;
-
-    private boolean isRewrote = false;
 
     public void setIsAnalyticFnCall(boolean v) {
         isAnalyticFnCall = v;
@@ -90,10 +82,6 @@ public class FunctionCallExpr extends Expr {
 
     public FunctionName getFnName() {
         return fnName;
-    }
-
-    public FunctionParams getFnParams() {
-        return fnParams;
     }
 
     // only used restore from readFields.
@@ -196,21 +184,15 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        Expr expr;
-        if (originStmtFnExpr != null) {
-            expr = originStmtFnExpr;
-        } else {
-            expr = this;
-        }
         StringBuilder sb = new StringBuilder();
-        sb.append(((FunctionCallExpr) expr).fnName).append("(");
-        if (((FunctionCallExpr) expr).fnParams.isStar()) {
+        sb.append(fnName).append("(");
+        if (fnParams.isStar()) {
             sb.append("*");
         }
-        if (((FunctionCallExpr) expr).fnParams.isDistinct()) {
+        if (fnParams.isDistinct()) {
             sb.append("DISTINCT ");
         }
-        sb.append(Joiner.on(", ").join(expr.childrenToSql())).append(")");
+        sb.append(Joiner.on(", ").join(childrenToSql())).append(")");
         return sb.toString();
     }
 
@@ -581,11 +563,7 @@ public class FunctionCallExpr extends Expr {
             if (this.children.isEmpty()) {
                 throw new AnalysisException("The " + fnName + " function must has one input param");
             }
-            // Prevent the cast type in vector exec engine
-            Type type = getChild(0).type;
-            if (!VectorizedUtil.isVectorized()) {
-                type = getChild(0).type.getMaxResolutionType();
-            }
+            Type type = getChild(0).type.getMaxResolutionType();
             fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[]{type},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.getFunction().equalsIgnoreCase("count_distinct")) {
@@ -626,7 +604,7 @@ public class FunctionCallExpr extends Expr {
                     Database db = Catalog.getCurrentCatalog().getDb(dbName);
                     if (db != null) {
                         Function searchDesc = new Function(
-                                fnName, Arrays.asList(collectChildReturnTypes()), Type.INVALID, false);
+                                fnName, collectChildReturnTypes(), Type.INVALID, false);
                         fn = db.getFunction(searchDesc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     }
                 }
@@ -749,75 +727,6 @@ public class FunctionCallExpr extends Expr {
                 this.type = new ArrayType(children.get(0).getType());
             }
         }
-    }
-
-    /**
-     * rewrite alias function to real function
-     * reset function name, function params and it's children to real function's
-     * @return
-     * @throws AnalysisException
-     */
-    public Expr rewriteExpr() throws AnalysisException {
-        if (isRewrote) {
-            return this;
-        }
-        // clone a new functionCallExpr to rewrite
-        FunctionCallExpr retExpr = (FunctionCallExpr) clone();
-        // clone origin function call expr in origin stmt
-        retExpr.originStmtFnExpr = clone();
-        // clone alias function origin expr for alias
-        FunctionCallExpr oriExpr = (FunctionCallExpr) ((AliasFunction) retExpr.fn).getOriginFunction().clone();
-        // reset fn name
-        retExpr.fnName = oriExpr.getFnName();
-        // reset fn params
-        List<Expr> inputParamsExprs = retExpr.fnParams.exprs();
-        List<String> parameters = ((AliasFunction) retExpr.fn).getParameters();
-        Preconditions.checkArgument(inputParamsExprs.size() == parameters.size(),
-                "Alias function [" + retExpr.fn.getFunctionName().getFunction() + "] args number is not equal to it's definition");
-        List<Expr> oriParamsExprs = oriExpr.fnParams.exprs();
-
-        // replace origin function params exprs' with input params expr depending on parameter name
-        for (int i = 0; i < oriParamsExprs.size(); i++) {
-            Expr expr = replaceParams(parameters, inputParamsExprs, oriParamsExprs.get(i));
-            oriParamsExprs.set(i, expr);
-        }
-
-        retExpr.fnParams = new FunctionParams(oriExpr.fnParams.isDistinct(), oriParamsExprs);
-
-        // reset children
-        retExpr.children.clear();
-        retExpr.children.addAll(oriExpr.getChildren());
-        retExpr.isRewrote = true;
-        return retExpr;
-    }
-
-    /**
-     * replace origin function expr and it's children with input params exprs depending on parameter name
-     * @param parameters
-     * @param inputParamsExprs
-     * @param oriExpr
-     * @return
-     * @throws AnalysisException
-     */
-    private Expr replaceParams(List<String> parameters, List<Expr> inputParamsExprs, Expr oriExpr) throws AnalysisException {
-        for (int i = 0; i < oriExpr.getChildren().size(); i++) {
-            Expr retExpr = replaceParams(parameters, inputParamsExprs, oriExpr.getChild(i));
-            oriExpr.setChild(i, retExpr);
-        }
-        if (oriExpr instanceof SlotRef) {
-            String columnName = ((SlotRef) oriExpr).getColumnName();
-            int index = parameters.indexOf(columnName);
-            if (index != -1) {
-                return inputParamsExprs.get(index);
-            }
-        }
-        // Initialize literalExpr without type information, because literalExpr does not save type information
-        // when it is persisted, so after fe restart, read the image,
-        // it will be missing type and report an error during analyze.
-        if (oriExpr instanceof LiteralExpr && oriExpr.getType().equals(Type.INVALID)) {
-            oriExpr = LiteralExpr.init((LiteralExpr) oriExpr);
-        }
-        return oriExpr;
     }
 
     @Override

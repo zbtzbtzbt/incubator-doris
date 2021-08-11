@@ -15,20 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#pragma once
 
-package org.apache.doris.demo.spring.datasource;
+#include "http/http_handler.h"
 
-/**
- * data source type
- */
-public enum DataSourceType {
-    /**
-     * master
-     */
-    MASTER,
+namespace doris {
 
-    /**
-     * slave
-     */
-    SLAVE
-}
+// Update BE config.
+class UpdateConfigAction : public HttpHandler {
+public:
+    UpdateConfigAction() {}
+    virtual ~UpdateConfigAction() {}
+
+    void handle(HttpRequest* req) override;
+};
+
+} // namespace doris

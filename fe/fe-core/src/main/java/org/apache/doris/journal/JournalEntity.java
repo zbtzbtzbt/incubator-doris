@@ -26,10 +26,10 @@ import org.apache.doris.backup.Repository;
 import org.apache.doris.backup.RestoreJob;
 import org.apache.doris.catalog.BrokerMgr;
 import org.apache.doris.catalog.Database;
-import org.apache.doris.catalog.EncryptKey;
-import org.apache.doris.catalog.EncryptKeySearchDesc;
 import org.apache.doris.catalog.Function;
 import org.apache.doris.catalog.FunctionSearchDesc;
+import org.apache.doris.catalog.EncryptKey;
+import org.apache.doris.catalog.EncryptKeySearchDesc;
 import org.apache.doris.catalog.Resource;
 import org.apache.doris.cluster.BaseParam;
 import org.apache.doris.cluster.Cluster;
@@ -46,7 +46,6 @@ import org.apache.doris.load.StreamLoadRecordMgr.FetchStreamLoadRecord;
 import org.apache.doris.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import org.apache.doris.load.loadv2.LoadJobFinalOperation;
 import org.apache.doris.load.routineload.RoutineLoadJob;
-import org.apache.doris.load.sync.SyncJob;
 import org.apache.doris.master.Checkpoint;
 import org.apache.doris.mysql.privilege.UserPropertyInfo;
 import org.apache.doris.persist.AlterRoutineLoadJobOperationLog;
@@ -68,8 +67,6 @@ import org.apache.doris.persist.DropPartitionInfo;
 import org.apache.doris.persist.DropResourceOperationLog;
 import org.apache.doris.persist.GlobalVarPersistInfo;
 import org.apache.doris.persist.HbPackage;
-import org.apache.doris.persist.LdapInfo;
-import org.apache.doris.persist.ModifyCommentOperationLog;
 import org.apache.doris.persist.ModifyPartitionInfo;
 import org.apache.doris.persist.ModifyTableDefaultDistributionBucketNumOperationLog;
 import org.apache.doris.persist.ModifyTablePropertyOperationLog;
@@ -351,11 +348,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_SET_LDAP_PASSWORD: {
-                data = LdapInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PROPERTY: {
                 data = UserPropertyInfo.read(in);
                 isRead = true;
@@ -535,16 +527,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_SYNC_JOB: {
-                data = SyncJob.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPDATE_SYNC_JOB_STATE: {
-                data = SyncJob.SyncJobUpdateStateInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_FETCH_STREAM_LOAD_RECORD: {
                 data = FetchStreamLoadRecord.read(in);
                 isRead = true;
@@ -615,11 +597,6 @@ public class JournalEntity implements Writable {
             }              
             case OperationType.OP_REMOVE_ALTER_JOB_V2: {
                 data = RemoveAlterJobV2OperationLog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_MODIFY_COMMENT: {
-                data = ModifyCommentOperationLog.read(in);
                 isRead = true;
                 break;
             }

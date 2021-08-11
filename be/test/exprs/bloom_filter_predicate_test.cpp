@@ -98,8 +98,6 @@ TEST_F(BloomFilterPredicateTest, bloom_filter_func_stringval_test) {
 
     ASSERT_TRUE(func->find_olap_engine((const void*)&fixed_char_true));
     ASSERT_TRUE(func->find_olap_engine((const void*)&fixed_char_false));
-
-    func->find(nullptr);
 }
 
 TEST_F(BloomFilterPredicateTest, bloom_filter_size_test) {

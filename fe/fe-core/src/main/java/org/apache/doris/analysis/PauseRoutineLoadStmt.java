@@ -17,12 +17,8 @@
 
 package org.apache.doris.analysis;
 
-import org.apache.doris.cluster.ClusterNamespace;
-import org.apache.doris.common.ErrorCode;
-import org.apache.doris.common.ErrorReport;
+import org.apache.doris.common.AnalysisException;
 import org.apache.doris.common.UserException;
-
-import com.google.common.base.Strings;
 
 /*
   Pause routine load by name
@@ -33,14 +29,9 @@ import com.google.common.base.Strings;
 public class PauseRoutineLoadStmt extends DdlStmt {
 
     private final LabelName labelName;
-    private String db;
 
     public PauseRoutineLoadStmt(LabelName labelName) {
         this.labelName = labelName;
-    }
-
-    public boolean isAll() {
-        return labelName == null;
     }
 
     public String getName() {
@@ -48,20 +39,12 @@ public class PauseRoutineLoadStmt extends DdlStmt {
     }
 
     public String getDbFullName(){
-        return db;
+        return labelName.getDbName();
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws UserException {
+    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
-        if (labelName != null) {
-            labelName.analyze(analyzer);
-            db = labelName.getDbName();
-        } else {
-            if (Strings.isNullOrEmpty(analyzer.getDefaultDb())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), analyzer.getDefaultDb());
-        }
+        labelName.analyze(analyzer);
     }
 }

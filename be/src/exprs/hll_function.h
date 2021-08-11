@@ -18,7 +18,6 @@
 #ifndef DORIS_BE_SRC_QUERY_EXPRS_HLL_FUNCTION_H
 #define DORIS_BE_SRC_QUERY_EXPRS_HLL_FUNCTION_H
 
-#include <string>
 #include "udf/udf.h"
 
 namespace doris {
@@ -27,8 +26,6 @@ class HllFunctions {
 public:
     static void init();
     static StringVal hll_hash(FunctionContext* ctx, const StringVal& dest_base);
-    static std::string hll_hash(const StringVal& dest_base);
-
     static StringVal hll_empty(FunctionContext* ctx);
     static void hll_init(FunctionContext*, StringVal* dst);
 

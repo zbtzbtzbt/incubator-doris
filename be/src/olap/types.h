@@ -59,9 +59,6 @@ public:
 
     virtual void direct_copy(void* dest, const void* src) const = 0;
 
-    // use only in zone map to cut data
-    virtual void direct_copy_may_cut(void* dest, const void* src) const = 0;
-
     //convert and deep copy value from other type's source
     virtual OLAPStatus convert_from(void* dest, const void* src, const TypeInfo* src_type,
                                     MemPool* mem_pool) const = 0;
@@ -103,10 +100,6 @@ public:
 
     inline void direct_copy(void* dest, const void* src) const override { _direct_copy(dest, src); }
 
-    inline void direct_copy_may_cut(void* dest, const void* src) const override {
-        _direct_copy_may_cut(dest, src);
-    }
-
     //convert and deep copy value from other type's source
     OLAPStatus convert_from(void* dest, const void* src, const TypeInfo* src_type,
                             MemPool* mem_pool) const override {
@@ -137,7 +130,6 @@ private:
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
     void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src);
-    void (*_direct_copy_may_cut)(void* dest, const void* src);
     OLAPStatus (*_convert_from)(void* dest, const void* src, const TypeInfo* src_type,
                                 MemPool* mem_pool);
 
@@ -299,10 +291,6 @@ public:
         }
     }
 
-    inline void direct_copy_may_cut(void* dest, const void* src) const override {
-        direct_copy(dest, src);
-    }
-
     OLAPStatus convert_from(void* dest, const void* src, const TypeInfo* src_type,
                             MemPool* mem_pool) const override {
         return OLAPStatus::OLAP_ERR_FUNC_NOT_IMPLEMENTED;
@@ -339,7 +327,7 @@ public:
     inline uint32_t hash_code(const void* data, uint32_t seed) const override {
         auto value = reinterpret_cast<const CollectionValue*>(data);
         auto len = value->length();
-        uint32_t result = HashUtil::hash(&len, sizeof(len), seed);
+        uint32_t result = HashUtil::hash(&len, sizeof(size_t), seed);
         for (size_t i = 0; i < len; ++i) {
             if (value->is_null_at(i)) {
                 result = seed * result;
@@ -504,8 +492,6 @@ struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
         *reinterpret_cast<CppType*>(dest) = *reinterpret_cast<const CppType*>(src);
     }
 
-    static inline void direct_copy_may_cut(void* dest, const void* src) { direct_copy(dest, src); }
-
     static OLAPStatus convert_from(void* dest, const void* src, const TypeInfo* src_type,
                                    MemPool* mem_pool) {
         return OLAPStatus::OLAP_ERR_FUNC_NOT_IMPLEMENTED;
@@ -524,7 +510,9 @@ struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
     }
 
     static std::string to_string(const void* src) {
-        return std::to_string(*reinterpret_cast<const CppType*>(src));
+        std::stringstream stream;
+        stream << *reinterpret_cast<const CppType*>(src);
+        return stream.str();
     }
 
     static OLAPStatus from_string(void* buf, const std::string& scan_key) {
@@ -540,7 +528,7 @@ struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
 static void prepare_char_before_convert(const void* src) {
     Slice* slice = const_cast<Slice*>(reinterpret_cast<const Slice*>(src));
     char* buf = slice->data;
-    int64_t p = slice->size - 1;
+    auto p = slice->size - 1;
     while (p >= 0 && buf[p] == '\0') {
         p--;
     }
@@ -716,9 +704,6 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_LARGEINT>
     static void direct_copy(void* dest, const void* src) {
         *reinterpret_cast<PackedInt128*>(dest) = *reinterpret_cast<const PackedInt128*>(src);
     }
-
-    static inline void direct_copy_may_cut(void* dest, const void* src) { direct_copy(dest, src); }
-
     static void set_to_max(void* buf) {
         *reinterpret_cast<PackedInt128*>(buf) = ~((int128_t)(1) << 127);
     }
@@ -994,7 +979,6 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_F
         auto slice = reinterpret_cast<const Slice*>(src);
         return slice->to_string();
     }
-
     static void deep_copy(void* dest, const void* src, MemPool* mem_pool) {
         auto l_slice = reinterpret_cast<Slice*>(dest);
         auto r_slice = reinterpret_cast<const Slice*>(src);
@@ -1021,17 +1005,6 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_CHAR> : public BaseFieldtypeTraits<OLAP_F
         auto slice = reinterpret_cast<Slice*>(buf);
         memset(slice->data, 0, slice->size);
     }
-
-    static void direct_copy_may_cut(void* dest, const void* src) {
-        auto l_slice = reinterpret_cast<Slice*>(dest);
-        auto r_slice = reinterpret_cast<const Slice*>(src);
-
-        auto min_size =
-                MAX_ZONE_MAP_INDEX_SIZE >= r_slice->size ? r_slice->size : MAX_ZONE_MAP_INDEX_SIZE;
-        memory_copy(l_slice->data, r_slice->data, min_size);
-        l_slice->size = min_size;
-    }
-
     static uint32_t hash_code(const void* data, uint32_t seed) {
         auto slice = reinterpret_cast<const Slice*>(data);
         return HashUtil::hash(slice->data, slice->size, seed);

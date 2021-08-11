@@ -55,7 +55,7 @@ std::string to_load_error_http_path(const std::string& file_name);
 // This class used to manage all the fragment execute in this instance
 class FragmentMgr : public RestMonitorIface {
 public:
-    using FinishCallback = std::function<void(PlanFragmentExecutor*)>;
+    typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
 
     FragmentMgr(ExecEnv* exec_env);
     virtual ~FragmentMgr();

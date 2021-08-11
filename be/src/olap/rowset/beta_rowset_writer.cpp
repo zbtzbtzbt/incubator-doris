@@ -144,10 +144,13 @@ OLAPStatus BetaRowsetWriter::flush_single_memtable(MemTable* memtable, int64_t* 
     std::unique_ptr<segment_v2::SegmentWriter> writer;
 
     MemTable::Iterator it(memtable);
-    for (it.seek_to_first(); it.valid(); it.next()) {
-        if (PREDICT_FALSE(writer == nullptr)) {
-            RETURN_NOT_OK(_create_segment_writer(&writer));
-        }
+    it.seek_to_first();
+    if (it.valid()) {
+        // Only create writer if memtable has data.
+        // Because we do not allow to flush a empty segment writer.
+        RETURN_NOT_OK(_create_segment_writer(&writer));
+    }
+    for ( ; it.valid(); it.next()) {
         ContiguousRow dst_row = it.get_current_row();
         auto s = writer->append_row(dst_row);
         if (PREDICT_FALSE(!s.ok())) {

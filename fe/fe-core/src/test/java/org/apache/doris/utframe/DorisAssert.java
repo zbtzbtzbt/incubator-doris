@@ -88,12 +88,8 @@ public class DorisAssert {
     }
 
     public DorisAssert dropTable(String tableName) throws Exception {
-        return dropTable(tableName, false);
-    }
-
-    public DorisAssert dropTable(String tableName, boolean isForce) throws Exception {
         DropTableStmt dropTableStmt =
-                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop table " + tableName + (isForce ? " force" : "") + ";", ctx);
+                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop table " + tableName + ";", ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
         return this;
     }

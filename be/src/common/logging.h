@@ -85,5 +85,4 @@
     DCHECK(a == b) << "[ " #a " = " << static_cast<int>(a) << " , " #b " = " \
                    << static_cast<int>(b) << " ]"
 
-#include <fmt/format.h>
 #endif

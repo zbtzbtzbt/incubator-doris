@@ -26,8 +26,7 @@ public class Field {
     private int precision;
     private int scale;
 
-    public Field() {
-    }
+    public Field() { }
 
     public Field(String name, String type, String comment, int precision, int scale) {
         this.name = name;

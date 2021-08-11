@@ -72,9 +72,7 @@ Syntax:
     
     1. `kafka_partitions`
     2. `kafka_offsets`
-    3. `kafka_broker_list`
-    4. `kafka_topic`
-    5. Custom property, such as `property.group.id`
+    3. Custom property, such as `property.group.id`
     
     Notice:
     

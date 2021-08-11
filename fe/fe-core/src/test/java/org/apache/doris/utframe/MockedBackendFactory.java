@@ -33,7 +33,6 @@ import org.apache.doris.thrift.TBackendInfo;
 import org.apache.doris.thrift.TCancelPlanFragmentParams;
 import org.apache.doris.thrift.TCancelPlanFragmentResult;
 import org.apache.doris.thrift.TDeleteEtlFilesRequest;
-import org.apache.doris.thrift.TDiskTrashInfo;
 import org.apache.doris.thrift.TEtlState;
 import org.apache.doris.thrift.TExecPlanFragmentParams;
 import org.apache.doris.thrift.TExecPlanFragmentResult;
@@ -243,16 +242,6 @@ public class MockedBackendFactory {
         @Override
         public TStatus eraseExportTask(TUniqueId task_id) throws TException {
             return new TStatus(TStatusCode.OK);
-        }
-
-        @Override
-        public long getTrashUsedCapacity() throws TException {
-            return  0l;
-        }
-
-        @Override
-        public List<TDiskTrashInfo> getDiskTrashUsedCapacity() throws TException {
-            return null;
         }
 
         @Override

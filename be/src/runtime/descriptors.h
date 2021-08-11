@@ -32,10 +32,6 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/types.h"
 
-namespace doris::vectorized {
-class ColumnWithTypeAndName;
-}
-
 namespace doris {
 
 class ObjectPool;
@@ -245,7 +241,6 @@ class TupleDescriptor {
 public:
     // virtual ~TupleDescriptor() {}
     int byte_size() const { return _byte_size; }
-    int num_materialized_slots() const { return _num_materialized_slots; }
     int num_null_slots() const { return _num_null_slots; }
     int num_null_bytes() const { return _num_null_bytes; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
@@ -356,11 +351,9 @@ public:
               _tuple_idx_nullable_map(desc._tuple_idx_nullable_map),
               _tuple_idx_map(desc._tuple_idx_map),
               _has_varlen_slots(desc._has_varlen_slots) {
-        _num_materialized_slots = 0;
         _num_null_slots = 0;
         std::vector<TupleDescriptor*>::const_iterator it = desc._tuple_desc_map.begin();
         for (; it != desc._tuple_desc_map.end(); ++it) {
-            _num_materialized_slots += (*it)->num_materialized_slots();
             _num_null_slots += (*it)->num_null_slots();
         }
         _num_null_bytes = (_num_null_slots + 7) / 8;
@@ -377,11 +370,6 @@ public:
     // TODO: also take avg string lengths into account, ie, change this
     // to GetAvgRowSize()
     int get_row_size() const;
-
-    int num_materialized_slots() const {
-        DCHECK(_num_materialized_slots != 0);
-        return _num_materialized_slots;
-    }
 
     int num_null_slots() const { return _num_null_slots; }
 
@@ -425,8 +413,6 @@ public:
 
     std::string debug_string() const;
 
-    int get_column_id(int slot_id) const;
-
 private:
     // Initializes tupleIdxMap during c'tor using the _tuple_desc_map.
     void init_tuple_idx_map();
@@ -446,7 +432,6 @@ private:
     // Provide quick way to check if there are variable length slots.
     bool _has_varlen_slots;
 
-    int _num_materialized_slots;
     int _num_null_slots;
     int _num_null_bytes;
 };

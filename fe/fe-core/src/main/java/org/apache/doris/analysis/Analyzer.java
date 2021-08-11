@@ -20,6 +20,7 @@ package org.apache.doris.analysis;
 import org.apache.doris.catalog.Catalog;
 import org.apache.doris.catalog.Column;
 import org.apache.doris.catalog.Database;
+import org.apache.doris.catalog.InfoSchemaDb;
 import org.apache.doris.catalog.OlapTable;
 import org.apache.doris.catalog.OlapTable.OlapTableState;
 import org.apache.doris.catalog.Table;
@@ -40,7 +41,6 @@ import org.apache.doris.rewrite.ExprRewriteRule;
 import org.apache.doris.rewrite.ExprRewriter;
 import org.apache.doris.rewrite.ExtractCommonFactorsRule;
 import org.apache.doris.rewrite.FoldConstantsRule;
-import org.apache.doris.rewrite.RewriteAliasFunctionRule;
 import org.apache.doris.rewrite.RewriteEncryptKeyRule;
 import org.apache.doris.rewrite.RewriteFromUnixTimeRule;
 import org.apache.doris.rewrite.NormalizeBinaryPredicatesRule;
@@ -270,7 +270,6 @@ public class Analyzer {
             rules.add(RewriteFromUnixTimeRule.INSTANCE);
             rules.add(SimplifyInvalidDateBinaryPredicatesDateRule.INSTANCE);
             rules.add(RewriteEncryptKeyRule.INSTANCE);
-            rules.add(RewriteAliasFunctionRule.INSTANCE);
             List<ExprRewriteRule> onceRules = Lists.newArrayList();
             onceRules.add(ExtractCommonFactorsRule.INSTANCE);
             exprRewriter_ = new ExprRewriter(rules, onceRules);
@@ -458,40 +457,13 @@ public class Analyzer {
         result.setAliases(aliases, ref.hasExplicitAlias());
 
         // Register all legal aliases.
-        for (String alias : aliases) {
+        for (String alias: aliases) {
             // TODO(zc)
             // aliasMap_.put(alias, result);
             tupleByAlias.put(alias, result);
         }
         tableRefMap_.put(result.getId(), ref);
 
-        return result;
-    }
-
-    /**
-     * Create an new tuple descriptor for the given table, register all table columns.
-     * Using this method requires external table read locks in advance.
-     */
-    public TupleDescriptor registerOlapTable(Table table, TableName tableName, List<String> partitions) {
-        TableRef ref = new TableRef(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
-        BaseTableRef tableRef = new BaseTableRef(ref, table, tableName);
-        TupleDescriptor result = globalState.descTbl.createTupleDescriptor();
-        result.setTable(table);
-        result.setRef(tableRef);
-        result.setAliases(tableRef.getAliases(), ref.hasExplicitAlias());
-        for (Column col : table.getBaseSchema(true)) {
-            SlotDescriptor slot = globalState.descTbl.addSlotDescriptor(result);
-            slot.setIsMaterialized(true);
-            slot.setColumn(col);
-            slot.setIsNullable(col.isAllowNull());
-            String key = tableRef.aliases_[0] + "." + col.getName();
-            slotRefMap.put(key, slot);
-        }
-        globalState.descTbl.computeStatAndMemLayout();
-        tableRefMap_.put(result.getId(), ref);
-        for (String alias : tableRef.getAliases()) {
-            tupleByAlias.put(alias, result);
-        }
         return result;
     }
 
@@ -554,13 +526,7 @@ public class Analyzer {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
         }
 
-        // tableName.getTbl() stores the table name specified by the user in the from statement.
-        // In the case of case-sensitive table names, the value of tableName.getTbl() is the same as table.getName().
-        // However, since the system view is not case-sensitive, table.getName() gets the lowercase view name,
-        // which may not be the same as the user's reference to the table name, causing the table name not to be found
-        // in registerColumnRef(). So here the tblName is constructed using tableName.getTbl()
-        // instead of table.getName().
-        TableName tblName = new TableName(dbName, tableName.getTbl());
+        TableName tblName = new TableName(database.getFullName(), table.getName());
         if (table instanceof View) {
             return new InlineViewRef((View) table, tableRef);
         } else {
@@ -625,6 +591,10 @@ public class Analyzer {
         if (newTblName == null) {
             d = resolveColumnRef(colName);
         } else {
+            if (InfoSchemaDb.isInfoSchemaDb(newTblName.getDb())
+                    || (newTblName.getDb() == null && InfoSchemaDb.isInfoSchemaDb(getDefaultDb()))) {
+                newTblName = new TableName(newTblName.getDb(), newTblName.getTbl().toLowerCase());
+            }
             d = resolveColumnRef(newTblName, colName);
         }
         /*

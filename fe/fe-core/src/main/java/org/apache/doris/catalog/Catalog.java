@@ -65,7 +65,6 @@ import org.apache.doris.analysis.InstallPluginStmt;
 import org.apache.doris.analysis.KeysDesc;
 import org.apache.doris.analysis.LinkDbStmt;
 import org.apache.doris.analysis.MigrateDbStmt;
-import org.apache.doris.analysis.ModifyDistributionClause;
 import org.apache.doris.analysis.PartitionDesc;
 import org.apache.doris.analysis.PartitionRenameClause;
 import org.apache.doris.analysis.RecoverDbStmt;
@@ -83,6 +82,7 @@ import org.apache.doris.analysis.TruncateTableStmt;
 import org.apache.doris.analysis.UninstallPluginStmt;
 import org.apache.doris.analysis.UserDesc;
 import org.apache.doris.analysis.UserIdentity;
+import org.apache.doris.analysis.ModifyDistributionClause;
 import org.apache.doris.backup.BackupHandler;
 import org.apache.doris.catalog.ColocateTableIndex.GroupId;
 import org.apache.doris.catalog.Database.DbState;
@@ -110,14 +110,10 @@ import org.apache.doris.common.ErrorReport;
 import org.apache.doris.common.FeConstants;
 import org.apache.doris.common.FeMetaVersion;
 import org.apache.doris.common.MarkedCountDownLatch;
-import org.apache.doris.common.MetaHeader;
 import org.apache.doris.common.MetaNotFoundException;
-import org.apache.doris.common.MetaReader;
-import org.apache.doris.common.MetaWriter;
 import org.apache.doris.common.Pair;
 import org.apache.doris.common.ThreadPoolManager;
 import org.apache.doris.common.UserException;
-import org.apache.doris.common.io.CountingDataOutputStream;
 import org.apache.doris.common.io.Text;
 import org.apache.doris.common.util.Daemon;
 import org.apache.doris.common.util.DynamicPartitionUtil;
@@ -161,9 +157,6 @@ import org.apache.doris.load.loadv2.LoadTimeoutChecker;
 import org.apache.doris.load.routineload.RoutineLoadManager;
 import org.apache.doris.load.routineload.RoutineLoadScheduler;
 import org.apache.doris.load.routineload.RoutineLoadTaskScheduler;
-import org.apache.doris.load.update.UpdateManager;
-import org.apache.doris.load.sync.SyncChecker;
-import org.apache.doris.load.sync.SyncJobManager;
 import org.apache.doris.master.Checkpoint;
 import org.apache.doris.master.MetaHelper;
 import org.apache.doris.master.PartitionInMemoryInfoCollector;
@@ -225,6 +218,7 @@ import org.apache.doris.thrift.TTaskType;
 import org.apache.doris.transaction.DbUsedDataQuotaInfoCollector;
 import org.apache.doris.transaction.GlobalTransactionMgr;
 import org.apache.doris.transaction.PublishVersionDaemon;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -234,15 +228,23 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
+import com.sleepycat.je.rep.InsufficientLogException;
+import com.sleepycat.je.rep.NetworkRestore;
+import com.sleepycat.je.rep.NetworkRestoreConfig;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.codehaus.jackson.map.ObjectMapper;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -263,11 +265,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-
-import com.sleepycat.je.rep.InsufficientLogException;
-import com.sleepycat.je.rep.NetworkRestore;
-import com.sleepycat.je.rep.NetworkRestoreConfig;
-import org.codehaus.jackson.map.ObjectMapper;
 
 public class Catalog {
     private static final Logger LOG = LogManager.getLogger(Catalog.class);
@@ -305,12 +302,10 @@ public class Catalog {
     private StreamLoadRecordMgr streamLoadRecordMgr;
     private RoutineLoadManager routineLoadManager;
     private ExportMgr exportMgr;
-    private SyncJobManager syncJobManager;
     private Alter alter;
     private ConsistencyChecker consistencyChecker;
     private BackupHandler backupHandler;
     private PublishVersionDaemon publishVersionDaemon;
-    private UpdateManager updateManager;
     private DeleteHandler deleteHandler;
     private DbUsedDataQuotaInfoCollector dbUsedDataQuotaInfoCollector;
     private PartitionInMemoryInfoCollector partitionInMemoryInfoCollector;
@@ -492,14 +487,12 @@ public class Catalog {
         this.load = new Load();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
-        this.syncJobManager = new SyncJobManager();
         this.alter = new Alter();
         this.consistencyChecker = new ConsistencyChecker();
         this.lock = new QueryableReentrantLock(true);
         this.backupHandler = new BackupHandler(this);
         this.metaDir = Config.meta_dir;
         this.publishVersionDaemon = new PublishVersionDaemon();
-        this.updateManager = new UpdateManager();
         this.deleteHandler = new DeleteHandler();
         this.dbUsedDataQuotaInfoCollector = new DbUsedDataQuotaInfoCollector();
         this.partitionInMemoryInfoCollector = new PartitionInMemoryInfoCollector();
@@ -1284,9 +1277,6 @@ public class Catalog {
         // Export checker
         ExportChecker.init(Config.export_checker_interval_second * 1000L);
         ExportChecker.startAll();
-        // Sync checker
-        SyncChecker.init(Config.sync_checker_interval_second);
-        SyncChecker.startAll();
         // Tablet checker and scheduler
         tabletChecker.start();
         tabletScheduler.start();
@@ -1497,10 +1487,52 @@ public class Catalog {
             return;
         }
         replayedJournalId.set(storage.getImageSeq());
-        MetaReader.read(curFile, this);
+        LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
+        long loadImageStartTime = System.currentTimeMillis();
+        DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
+
+        long checksum = 0;
+        try {
+            checksum = loadHeader(dis, checksum);
+            checksum = loadMasterInfo(dis, checksum);
+            checksum = loadFrontends(dis, checksum);
+            checksum = Catalog.getCurrentSystemInfo().loadBackends(dis, checksum);
+            checksum = loadDb(dis, checksum);
+            // ATTN: this should be done after load Db, and before loadAlterJob
+            recreateTabletInvertIndex();
+            // rebuild es state state
+            esRepository.loadTableFromCatalog();
+
+            checksum = loadLoadJob(dis, checksum);
+            checksum = loadAlterJob(dis, checksum);
+            checksum = loadRecycleBin(dis, checksum);
+            checksum = loadGlobalVariable(dis, checksum);
+            checksum = loadCluster(dis, checksum);
+            checksum = loadBrokers(dis, checksum);
+            checksum = loadResources(dis, checksum);
+            checksum = loadExportJob(dis, checksum);
+            checksum = loadBackupHandler(dis, checksum);
+            checksum = loadPaloAuth(dis, checksum);
+            // global transaction must be replayed before load jobs v2
+            checksum = loadTransactionState(dis, checksum);
+            checksum = loadColocateTableIndex(dis, checksum);
+            checksum = loadRoutineLoadJobs(dis, checksum);
+            checksum = loadLoadJobsV2(dis, checksum);
+            checksum = loadSmallFiles(dis, checksum);
+            checksum = loadPlugins(dis, checksum);
+            checksum = loadDeleteHandler(dis, checksum);
+
+            long remoteChecksum = dis.readLong();
+            Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
+        } finally {
+            dis.close();
+        }
+
+        long loadImageEndTime = System.currentTimeMillis();
+        LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
-    public void recreateTabletInvertIndex() {
+    private void recreateTabletInvertIndex() {
         if (isCheckpointThread()) {
             return;
         }
@@ -1542,16 +1574,7 @@ public class Catalog {
         } // end for dbs
     }
 
-    public long loadHeader(DataInputStream dis, MetaHeader metaHeader, long checksum) throws IOException, DdlException {
-        switch (metaHeader.getMetaFormat()) {
-            case COR1:
-                return loadHeaderCOR1(dis, checksum);
-            default:
-                throw new DdlException("unsupported image format.");
-        }
-    }
-
-    public long loadHeaderCOR1(DataInputStream dis, long checksum) throws IOException {
+    public long loadHeader(DataInputStream dis, long checksum) throws IOException {
         int journalVersion = dis.readInt();
         long newChecksum = checksum ^ journalVersion;
         MetaContext.get().setMetaVersion(journalVersion);
@@ -1693,14 +1716,6 @@ public class Catalog {
         return newChecksum;
     }
 
-    public long loadSyncJobs(DataInputStream dis, long checksum) throws IOException, DdlException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_103) {
-            syncJobManager.readField(dis);
-        }
-        LOG.info("finished replay syncJobMgr from image");
-        return checksum;
-    }
-
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
         for (JobType type : JobType.values()) {
@@ -1803,11 +1818,21 @@ public class Catalog {
         return checksum;
     }
 
+    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
+        getBackupHandler().write(dos);
+        return checksum;
+    }
+
     public long loadDeleteHandler(DataInputStream dis, long checksum) throws IOException {
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_82) {
             this.deleteHandler = DeleteHandler.read(dis);
         }
         LOG.info("finished replay deleteHandler from image");
+        return checksum;
+    }
+
+    public long saveDeleteHandler(DataOutputStream dos, long checksum) throws IOException {
+        getDeleteHandler().write(dos);
         return checksum;
     }
 
@@ -1845,15 +1870,6 @@ public class Catalog {
             }
         }
         LOG.info("finished replay recycleBin from image");
-        return checksum;
-    }
-
-    // global variable persistence
-    public long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
-        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
-            VariableMgr.read(in);
-        }
-        LOG.info("finished replay globalVariable from image");
         return checksum;
     }
 
@@ -1917,10 +1933,44 @@ public class Catalog {
         if (!curFile.exists()) {
             curFile.createNewFile();
         }
-        MetaWriter.write(curFile, this);
+
+        // save image does not need any lock. because only checkpoint thread will call this method.
+        LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
+
+        long checksum = 0;
+        long saveImageStartTime = System.currentTimeMillis();
+        try (DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(curFile)))) {
+            checksum = saveHeader(dos, replayedJournalId, checksum);
+            checksum = saveMasterInfo(dos, checksum);
+            checksum = saveFrontends(dos, checksum);
+            checksum = Catalog.getCurrentSystemInfo().saveBackends(dos, checksum);
+            checksum = saveDb(dos, checksum);
+            checksum = saveLoadJob(dos, checksum);
+            checksum = saveAlterJob(dos, checksum);
+            checksum = saveRecycleBin(dos, checksum);
+            checksum = saveGlobalVariable(dos, checksum);
+            checksum = saveCluster(dos, checksum);
+            checksum = saveBrokers(dos, checksum);
+            checksum = saveResources(dos, checksum);
+            checksum = saveExportJob(dos, checksum);
+            checksum = saveBackupHandler(dos, checksum);
+            checksum = savePaloAuth(dos, checksum);
+            checksum = saveTransactionState(dos, checksum);
+            checksum = saveColocateTableIndex(dos, checksum);
+            checksum = saveRoutineLoadJobs(dos, checksum);
+            checksum = saveLoadJobsV2(dos, checksum);
+            checksum = saveSmallFiles(dos, checksum);
+            checksum = savePlugins(dos, checksum);
+            checksum = saveDeleteHandler(dos, checksum);
+            dos.writeLong(checksum);
+        }
+
+        long saveImageEndTime = System.currentTimeMillis();
+        LOG.info("finished save image {} in {} ms. checksum is {}",
+                curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
     }
 
-    public long saveHeader(CountingDataOutputStream dos, long replayedJournalId, long checksum) throws IOException {
+    public long saveHeader(DataOutputStream dos, long replayedJournalId, long checksum) throws IOException {
         // Write meta version
         checksum ^= FeConstants.meta_version;
         dos.writeInt(FeConstants.meta_version);
@@ -1939,7 +1989,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveMasterInfo(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveMasterInfo(DataOutputStream dos, long checksum) throws IOException {
         Text.writeString(dos, masterIp);
 
         checksum ^= masterRpcPort;
@@ -1951,7 +2001,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveFrontends(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveFrontends(DataOutputStream dos, long checksum) throws IOException {
         int size = frontends.size();
         checksum ^= size;
 
@@ -1971,7 +2021,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveDb(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveDb(DataOutputStream dos, long checksum) throws IOException {
         int dbCount = idToDb.size() - nameToCluster.keySet().size();
         checksum ^= dbCount;
         dos.writeInt(dbCount);
@@ -1987,7 +2037,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveLoadJob(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveLoadJob(DataOutputStream dos, long checksum) throws IOException {
         // 1. save load.dbToLoadJob
         Map<Long, List<LoadJob>> dbToLoadJob = load.getDbToLoadJobs();
         int jobSize = dbToLoadJob.size();
@@ -2026,7 +2076,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveExportJob(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveExportJob(DataOutputStream dos, long checksum) throws IOException {
         Map<Long, ExportJob> idToJob = exportMgr.getIdToJob();
         int size = idToJob.size();
         checksum ^= size;
@@ -2041,19 +2091,14 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveSyncJobs(CountingDataOutputStream dos, long checksum) throws IOException {
-        syncJobManager.write(dos);
-        return checksum;
-    }
-
-    public long saveAlterJob(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {
         for (JobType type : JobType.values()) {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
     }
 
-    public long saveAlterJob(CountingDataOutputStream dos, long checksum, JobType type) throws IOException {
+    public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
         Map<Long, AlterJob> alterJobs = null;
         ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
@@ -2103,22 +2148,12 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveBackupHandler(CountingDataOutputStream dos, long checksum) throws IOException {
-        getBackupHandler().write(dos);
-        return checksum;
-    }
-
-    public long saveDeleteHandler(CountingDataOutputStream dos, long checksum) throws IOException {
-        getDeleteHandler().write(dos);
-        return checksum;
-    }
-
-    public long savePaloAuth(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long savePaloAuth(DataOutputStream dos, long checksum) throws IOException {
         auth.write(dos);
         return checksum;
     }
 
-    public long saveTransactionState(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveTransactionState(DataOutputStream dos, long checksum) throws IOException {
         int size = globalTransactionMgr.getTransactionNum();
         checksum ^= size;
         dos.writeInt(size);
@@ -2126,24 +2161,33 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveRecycleBin(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveRecycleBin(DataOutputStream dos, long checksum) throws IOException {
         CatalogRecycleBin recycleBin = Catalog.getCurrentRecycleBin();
         recycleBin.write(dos);
         return checksum;
     }
 
-    public long saveColocateTableIndex(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
         Catalog.getCurrentColocateIndex().write(dos);
         return checksum;
     }
 
-    public long saveRoutineLoadJobs(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveRoutineLoadJobs(DataOutputStream dos, long checksum) throws IOException {
         Catalog.getCurrentCatalog().getRoutineLoadManager().write(dos);
         return checksum;
     }
 
-    public long saveGlobalVariable(CountingDataOutputStream dos, long checksum) throws IOException {
-        VariableMgr.write(dos);
+    // global variable persistence
+    public long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
+        if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_22) {
+            VariableMgr.read(in);
+        }
+        LOG.info("finished replay globalVariable from image");
+        return checksum;
+    }
+
+    public long saveGlobalVariable(DataOutputStream out, long checksum) throws IOException {
+        VariableMgr.write(out);
         return checksum;
     }
 
@@ -2155,18 +2199,18 @@ public class Catalog {
         VariableMgr.replayGlobalVariableV2(info);
     }
 
-    public long saveLoadJobsV2(CountingDataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentCatalog().getLoadManager().write(dos);
+    public long saveLoadJobsV2(DataOutputStream out, long checksum) throws IOException {
+        Catalog.getCurrentCatalog().getLoadManager().write(out);
         return checksum;
     }
 
-	public long saveResources(CountingDataOutputStream dos, long checksum) throws IOException {
-        Catalog.getCurrentCatalog().getResourceMgr().write(dos);
+    public long saveResources(DataOutputStream out, long checksum) throws IOException {
+        Catalog.getCurrentCatalog().getResourceMgr().write(out);
         return checksum;
     }
 
-    public long saveSmallFiles(CountingDataOutputStream dos, long checksum) throws IOException {
-        smallFileMgr.write(dos);
+    private long saveSmallFiles(DataOutputStream out, long checksum) throws IOException {
+        smallFileMgr.write(out);
         return checksum;
     }
 
@@ -4828,10 +4872,6 @@ public class Catalog {
         return this.backupHandler;
     }
 
-    public UpdateManager getUpdateManager() {
-        return updateManager;
-    }
-
     public DeleteHandler getDeleteHandler() {
         return this.deleteHandler;
     }
@@ -4866,10 +4906,6 @@ public class Catalog {
 
     public ExportMgr getExportMgr() {
         return this.exportMgr;
-    }
-
-    public SyncJobManager getSyncJobManager() {
-        return this.syncJobManager;
     }
 
     public SmallFileMgr getSmallFileMgr() {
@@ -5751,8 +5787,8 @@ public class Catalog {
         return functionSet.getBulitinFunctions();
     }
 
-    public boolean isNullResultWithOneNullParamFunction(String funcName) {
-        return functionSet.isNullResultWithOneNullParamFunctions(funcName);
+    public boolean isNonNullResultWithNullParamFunction(String funcName) {
+        return functionSet.isNonNullResultWithNullParamFunctions(funcName);
     }
 
     public boolean isNondeterministicFunction(String funcName) {
@@ -6379,7 +6415,7 @@ public class Catalog {
         db.setDbState(info.getDbState());
     }
 
-    public long saveCluster(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveCluster(DataOutputStream dos, long checksum) throws IOException {
         final int clusterCount = idToCluster.size();
         checksum ^= clusterCount;
         dos.writeInt(clusterCount);
@@ -6394,7 +6430,7 @@ public class Catalog {
         return checksum;
     }
 
-    public long saveBrokers(CountingDataOutputStream dos, long checksum) throws IOException {
+    public long saveBrokers(DataOutputStream dos, long checksum) throws IOException {
         Map<String, List<FsBroker>> addressListMap = brokerMgr.getBrokerListMap();
         int size = addressListMap.size();
         checksum ^= size;

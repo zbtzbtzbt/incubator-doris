@@ -178,8 +178,12 @@ public class DppUtils {
             }
         } else if (type.equals(DataTypes.BooleanType)) {
             Boolean b = (Boolean)o;
-            byte value = (byte) (b ? 1 : 0);
-            buffer.put(value);
+            String str = b ? "1" : "0";
+            try {
+                buffer = ByteBuffer.wrap(str.getBytes("UTF-8"));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
         buffer.flip();
         return buffer;

@@ -170,7 +170,8 @@ Status BrokerScanner::open_file_reader() {
     case TFileType::FILE_HDFS: {
 #if defined(__x86_64__)
         BufferedReader* file_reader =
-                new BufferedReader(_profile, new HdfsFileReader(range.hdfs_params, range.path, start_offset));
+                new BufferedReader(new HdfsFileReader(range.hdfs_params, range.path, start_offset),
+                                   config::remote_storage_read_buffer_mb * 1024 * 1024);
         RETURN_IF_ERROR(file_reader->open());
         _cur_file_reader = file_reader;
         break;
@@ -188,7 +189,8 @@ Status BrokerScanner::open_file_reader() {
     }
     case TFileType::FILE_S3: {
         BufferedReader* s3_reader =
-                new BufferedReader(_profile, new S3Reader(_params.properties, range.path, start_offset));
+                new BufferedReader(new S3Reader(_params.properties, range.path, start_offset),
+                                   config::remote_storage_read_buffer_mb * 1024 * 1024);
         RETURN_IF_ERROR(s3_reader->open());
         _cur_file_reader = s3_reader;
         break;

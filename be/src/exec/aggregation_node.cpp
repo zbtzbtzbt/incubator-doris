@@ -19,6 +19,7 @@
 
 #include <gperftools/profiler.h>
 #include <math.h>
+#include <thrift/protocol/TDebugProtocol.h>
 
 #include <sstream>
 
@@ -222,15 +223,6 @@ Status AggregationNode::open(RuntimeState* state) {
 }
 
 Status AggregationNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    // 1. `!need_finalize` means this aggregation node not the level two aggregation node
-    // 2. `_singleton_output_tuple != nullptr` means is not group by
-    // 3. `child(0)->rows_returned() == 0` mean not data from child
-    // in level two aggregation node should return NULL result
-    //    level one aggregation node set `eos = true` return directly
-    if (UNLIKELY(!_needs_finalize && _singleton_output_tuple != nullptr && child(0)->rows_returned() == 0)) {
-        *eos = true;
-        return Status::OK();
-    }
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
@@ -411,8 +403,7 @@ Tuple* AggregationNode::finalize_tuple(Tuple* tuple, MemPool* pool) {
         dst = Tuple::create(_output_tuple_desc->byte_size(), pool);
     }
     if (_needs_finalize) {
-        AggFnEvaluator::finalize(_aggregate_evaluators, _agg_fn_ctxs, tuple, dst,
-                _singleton_output_tuple != nullptr && child(0)->rows_returned() == 0);
+        AggFnEvaluator::finalize(_aggregate_evaluators, _agg_fn_ctxs, tuple, dst);
     } else {
         AggFnEvaluator::serialize(_aggregate_evaluators, _agg_fn_ctxs, tuple);
     }

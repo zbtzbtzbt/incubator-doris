@@ -18,7 +18,6 @@
 #include "exprs/cast_functions.h"
 
 #include <cmath>
-#include <fmt/format.h>
 
 #include "exprs/anyval_util.h"
 #include "gutil/strings/numbers.h"
@@ -132,15 +131,23 @@ CAST_FUNCTION(FloatVal, DoubleVal, double_val)
 
 CAST_FROM_STRINGS();
 
+// Special-case tinyint because boost thinks it's a char and handles it differently.
+// e.g. '0' is written as an empty string.
+StringVal CastFunctions::cast_to_string_val(FunctionContext* ctx, const TinyIntVal& val) {
+    if (val.is_null) {
+        return StringVal::null();
+    }
+    int64_t tmp_val = val.val;
+    return AnyValUtil::from_string_temp(ctx, std::to_string(tmp_val));
+}
+
 #define CAST_TO_STRING(num_type)                                                             \
     StringVal CastFunctions::cast_to_string_val(FunctionContext* ctx, const num_type& val) { \
         if (val.is_null) return StringVal::null();                                           \
-        auto f = fmt::format_int(val.val);                                                   \
-        return AnyValUtil::from_buffer_temp(ctx, f.data(), f.size());                        \
+        return AnyValUtil::from_string_temp(ctx, std::to_string(val.val));                   \
     }
 
 CAST_TO_STRING(BooleanVal);
-CAST_TO_STRING(TinyIntVal);
 CAST_TO_STRING(SmallIntVal);
 CAST_TO_STRING(IntVal);
 CAST_TO_STRING(BigIntVal);
@@ -149,9 +156,10 @@ StringVal CastFunctions::cast_to_string_val(FunctionContext* ctx, const LargeInt
     if (val.is_null) {
         return StringVal::null();
     }
-
-    auto string_value = LargeIntValue::to_string(val.val);
-    return AnyValUtil::from_buffer_temp(ctx, string_value.data(), string_value.size());
+    char buf[64];
+    int len = 64;
+    char* d = LargeIntValue::to_string(val.val, buf, &len);
+    return AnyValUtil::from_buffer_temp(ctx, d, len);
 }
 
 template <typename T>

@@ -16,8 +16,6 @@
 // under the License.
 
 #include "exprs/string_functions.h"
-#include "util/vectorized-tool/lower.h"
-#include "util/vectorized-tool/upper.h"
 
 #include <re2/re2.h>
 
@@ -348,11 +346,15 @@ StringVal StringFunctions::lower(FunctionContext* context, const StringVal& str)
     if (str.is_null) {
         return StringVal::null();
     }
+    // TODO pengyubing
+    // StringVal result = StringVal::create_temp_string_val(context, str.len);
     StringVal result(context, str.len);
     if (UNLIKELY(result.is_null)) {
         return result;
     }
-    Lower::to_lower(str.ptr, str.len, result.ptr);
+    for (int i = 0; i < str.len; ++i) {
+        result.ptr[i] = ::tolower(str.ptr[i]);
+    }
     return result;
 }
 
@@ -360,11 +362,15 @@ StringVal StringFunctions::upper(FunctionContext* context, const StringVal& str)
     if (str.is_null) {
         return StringVal::null();
     }
+    // TODO pengyubing
+    // StringVal result = StringVal::create_temp_string_val(context, str.len);
     StringVal result(context, str.len);
     if (UNLIKELY(result.is_null)) {
         return result;
     }
-    Upper::to_upper(str.ptr, str.len, result.ptr);
+    for (int i = 0; i < str.len; ++i) {
+        result.ptr[i] = ::toupper(str.ptr[i]);
+    }
     return result;
 }
 
@@ -880,10 +886,8 @@ StringVal StringFunctions::money_format(FunctionContext* context, const DoubleVa
         return StringVal::null();
     }
 
-    double v_cent = MathFunctions::my_double_round(v.val, 2, false, false);
-    bool negative = v_cent < 0;
-    int32_t frac_value = negative ? ((int64_t) (-v_cent * 100)) % 100 : ((int64_t)(v_cent * 100)) % 100;
-    return do_money_format<int64_t, 26>(context, (int64_t) v_cent , frac_value);
+    double v_cent = MathFunctions::my_double_round(v.val, 2, false, false) * 100;
+    return do_money_format(context, std::to_string(v_cent));
 }
 
 StringVal StringFunctions::money_format(FunctionContext* context, const DecimalV2Val& v) {
@@ -893,21 +897,25 @@ StringVal StringFunctions::money_format(FunctionContext* context, const DecimalV
 
     DecimalV2Value rounded(0);
     DecimalV2Value::from_decimal_val(v).round(&rounded, 2, HALF_UP);
-    return do_money_format<int64_t, 26>(context, rounded.int_value(), abs(rounded.frac_value()));
+    DecimalV2Value tmp(std::string_view("100"));
+    DecimalV2Value result = rounded * tmp;
+    return do_money_format(context, result.to_string());
 }
 
 StringVal StringFunctions::money_format(FunctionContext* context, const BigIntVal& v) {
     if (v.is_null) {
         return StringVal::null();
     }
-    return do_money_format<int64_t, 26>(context, v.val);
+
+    return do_money_format(context, fmt::format("{}00", v.val, "00"));
 }
 
 StringVal StringFunctions::money_format(FunctionContext* context, const LargeIntVal& v) {
     if (v.is_null) {
         return StringVal::null();
     }
-    return do_money_format<__int128_t, 52>(context, v.val);
+
+    return do_money_format(context, fmt::format("{}00", v.val, "00"));
 }
 
 static int index_of(const uint8_t* source, int source_offset, int source_count,

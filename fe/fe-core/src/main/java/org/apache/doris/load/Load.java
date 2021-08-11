@@ -65,7 +65,6 @@ import org.apache.doris.catalog.TabletMeta;
 import org.apache.doris.catalog.Type;
 import org.apache.doris.cluster.ClusterNamespace;
 import org.apache.doris.common.AnalysisException;
-import org.apache.doris.common.CaseSensibility;
 import org.apache.doris.common.Config;
 import org.apache.doris.common.DdlException;
 import org.apache.doris.common.ErrorCode;
@@ -76,7 +75,6 @@ import org.apache.doris.common.LabelAlreadyUsedException;
 import org.apache.doris.common.LoadException;
 import org.apache.doris.common.MetaNotFoundException;
 import org.apache.doris.common.Pair;
-import org.apache.doris.common.PatternMatcher;
 import org.apache.doris.common.UserException;
 import org.apache.doris.common.util.ListComparator;
 import org.apache.doris.common.util.MetaLockUtils;
@@ -1593,7 +1591,7 @@ public class Load {
         return false;
     }
 
-    public boolean isLabelExist(String dbName, String labelValue, boolean isAccurateMatch) throws DdlException, AnalysisException {
+    public boolean isLabelExist(String dbName, String labelValue, boolean isAccurateMatch) throws DdlException {
         // get load job and check state
         Database db = Catalog.getCurrentCatalog().getDb(dbName);
         if (db == null) {
@@ -1611,9 +1609,8 @@ public class Load {
                     loadJobs.addAll(labelToLoadJobs.get(labelValue));
                 }
             } else {
-                PatternMatcher matcher = PatternMatcher.createMysqlPattern(labelValue, CaseSensibility.LABEL.getCaseSensibility());
                 for (Map.Entry<String, List<LoadJob>> entry : labelToLoadJobs.entrySet()) {
-                    if (matcher.match(entry.getKey())) {
+                    if (entry.getKey().contains(labelValue)) {
                         loadJobs.addAll(entry.getValue());
                     }
                 }
@@ -1630,7 +1627,7 @@ public class Load {
         }
     }
 
-    public boolean cancelLoadJob(CancelLoadStmt stmt, boolean isAccurateMatch) throws DdlException, AnalysisException {
+    public boolean cancelLoadJob(CancelLoadStmt stmt, boolean isAccurateMatch) throws DdlException {
         // get params
         String dbName = stmt.getDbName();
         String label = stmt.getLabel();
@@ -1656,10 +1653,9 @@ public class Load {
                     matchLoadJobs.addAll(labelToLoadJobs.get(label));
                 }
             } else {
-                PatternMatcher matcher = PatternMatcher.createMysqlPattern(label, CaseSensibility.LABEL.getCaseSensibility());
                 for (Map.Entry<String, List<LoadJob>> entry : labelToLoadJobs.entrySet()) {
-                    if (matcher.match(entry.getKey())) {
-                        loadJobs.addAll(entry.getValue());
+                    if (entry.getKey().contains(label)) {
+                        matchLoadJobs.addAll(entry.getValue());
                     }
                 }
             }
@@ -1908,7 +1904,7 @@ public class Load {
     }
 
     public LinkedList<List<Comparable>> getLoadJobInfosByDb(long dbId, String dbName, String labelValue,
-                                                            boolean accurateMatch, Set<JobState> states) throws AnalysisException {
+                                                            boolean accurateMatch, Set<JobState> states) {
         LinkedList<List<Comparable>> loadJobInfos = new LinkedList<List<Comparable>>();
         readLock();
         try {
@@ -1919,11 +1915,6 @@ public class Load {
 
             long start = System.currentTimeMillis();
             LOG.debug("begin to get load job info, size: {}", loadJobs.size());
-            PatternMatcher matcher = null;
-            if (labelValue != null && !accurateMatch) {
-                matcher = PatternMatcher.createMysqlPattern(labelValue, CaseSensibility.LABEL.getCaseSensibility());
-            }
-
             for (LoadJob loadJob : loadJobs) {
                 // filter first
                 String label = loadJob.getLabel();
@@ -1935,7 +1926,7 @@ public class Load {
                             continue;
                         }
                     } else {
-                        if (!matcher.match(label)) {
+                        if (!label.contains(labelValue)) {
                             continue;
                         }
                     }

@@ -17,9 +17,6 @@
 
 package org.apache.doris.httpv2.rest;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Setter;
 import org.apache.doris.catalog.Catalog;
 import org.apache.doris.common.ConfigBase;
 import org.apache.doris.common.ConfigBase.ConfField;
@@ -27,10 +24,7 @@ import org.apache.doris.httpv2.entity.ResponseEntityBuilder;
 import org.apache.doris.mysql.privilege.PrivPredicate;
 import org.apache.doris.qe.ConnectContext;
 
-import com.clearspring.analytics.util.Lists;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.Maps;
-import com.google.gson.annotations.SerializedName;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,9 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -57,7 +49,6 @@ public class SetConfigAction extends RestBaseController {
     private static final Logger LOG = LogManager.getLogger(SetConfigAction.class);
 
     private static final String PERSIST_PARAM = "persist";
-    private static final String RESET_PERSIST = "reset_persist";
 
     @RequestMapping(path = "/api/_set_config", method = RequestMethod.GET)
     protected Object set_config(HttpServletRequest request, HttpServletResponse response) {
@@ -65,26 +56,16 @@ public class SetConfigAction extends RestBaseController {
         checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
 
         boolean needPersist = false;
-        boolean resetPersist = true;
-
-        Map<String, String[]> tempConfigs = request.getParameterMap();
-        Map<String, String[]> configs = Maps.newHashMap();
-        configs.putAll(tempConfigs);
+        Map<String, String[]> configs = request.getParameterMap();
         if (configs.containsKey(PERSIST_PARAM)) {
             String[] val = configs.remove(PERSIST_PARAM);
             if (val.length == 1 && val[0].equals("true")) {
                 needPersist = true;
             }
         }
-        if (configs.containsKey(RESET_PERSIST)) {
-            String[] val = configs.remove(RESET_PERSIST);
-            if (val.length == 1 && val[0].equals("false")) {
-                resetPersist = false;
-            }
-        }
 
         Map<String, String> setConfigs = Maps.newHashMap();
-        List<ErrConfig> errConfigs = Lists.newArrayList();
+        Map<String, String> errConfigs = Maps.newHashMap();
 
         LOG.debug("get config from url: {}, need persist: {}", configs, needPersist);
 
@@ -92,41 +73,29 @@ public class SetConfigAction extends RestBaseController {
         for (Field f : fields) {
             // ensure that field has "@ConfField" annotation
             ConfField anno = f.getAnnotation(ConfField.class);
+            if (anno == null || !anno.mutable()) {
+                continue;
+            }
 
-            if (anno == null) {
+            if (anno.masterOnly() && !Catalog.getCurrentCatalog().isMaster()) {
                 continue;
             }
 
             // ensure that field has property string
             String confKey = anno.value().equals("") ? f.getName() : anno.value();
             String[] confVals = configs.get(confKey);
-            if (confVals == null) {
+            if (confVals == null || confVals.length == 0) {
                 continue;
             }
 
-            if (confVals.length != 1) {
-                errConfigs.add(new ErrConfig(confKey, "", "No or multiple configuration values."));
-                continue;
-            }
-
-            if (!anno.mutable()) {
-                errConfigs.add(new ErrConfig(confKey, confVals[0], "Not support dynamic modification."));
-                continue;
-            }
-
-            if (anno.masterOnly() && !Catalog.getCurrentCatalog().isMaster()) {
-                errConfigs.add(new ErrConfig(confKey, confVals[0], "Not support modification on non-master"));
+            if (confVals.length > 1) {
                 continue;
             }
 
             try {
                 ConfigBase.setConfigField(f, confVals[0]);
-            } catch (IllegalArgumentException e){
-                errConfigs.add(new ErrConfig(confKey, confVals[0], "Unsupported configuration value type."));
-                continue;
             } catch (Exception e) {
                 LOG.warn("failed to set config {}:{}, {}", confKey, confVals[0], e.getMessage());
-                errConfigs.add(new ErrConfig(confKey, confVals[0], e.getMessage()));
                 continue;
             }
 
@@ -136,7 +105,7 @@ public class SetConfigAction extends RestBaseController {
         String persistMsg = "";
         if (needPersist) {
             try {
-                ConfigBase.persistConfig(setConfigs, resetPersist);
+                ConfigBase.persistConfig(setConfigs);
                 persistMsg = "ok";
             } catch (IOException e) {
                 LOG.warn("failed to persist config", e);
@@ -144,56 +113,19 @@ public class SetConfigAction extends RestBaseController {
             }
         }
 
-        List<String> errConfigNames = errConfigs.stream().map(ErrConfig::getConfigName).collect(Collectors.toList());
         for (String key : configs.keySet()) {
-            if (!setConfigs.containsKey(key) && !errConfigNames.contains(key)) {
+            if (!setConfigs.containsKey(key)) {
                 String[] confVals = configs.get(key);
                 String confVal = confVals.length == 1 ? confVals[0] : "invalid value";
-                errConfigs.add(new ErrConfig(key, confVal, "invalid config"));
+                errConfigs.put(key, confVal);
             }
         }
 
-        return ResponseEntityBuilder.ok(new SetConfigEntity(setConfigs, errConfigs, persistMsg));
-    }
+        Map<String, Object> resultMap = Maps.newHashMap();
+        resultMap.put("set", setConfigs);
+        resultMap.put("err", errConfigs);
+        resultMap.put("persist", persistMsg);
 
-    @Setter
-    @AllArgsConstructor
-    public static class ErrConfig{
-        @SerializedName(value = "config_name")
-        @JsonProperty("config_name")
-        private String configName;
-        @SerializedName(value = "config_value")
-        @JsonProperty("config_value")
-        private String configValue;
-        @SerializedName(value = "err_info")
-        @JsonProperty("err_info")
-        private String errInfo;
-
-        public String getConfigName() {
-            return configName;
-        }
-
-        public String getConfigValue() {
-            return configValue;
-        }
-
-        public String getErrInfo() {
-            return errInfo;
-        }
-    }
-
-    @Getter
-    @Setter
-    @AllArgsConstructor
-    public static class SetConfigEntity{
-        @SerializedName(value = "set")
-        @JsonProperty("set")
-        Map<String, String> setConfigs;
-        @SerializedName(value = "err")
-        @JsonProperty("err")
-        List<ErrConfig> errConfigs;
-        @SerializedName(value = "persist")
-        @JsonProperty("persist")
-        String persistMsg;
+        return ResponseEntityBuilder.ok(resultMap);
     }
 }

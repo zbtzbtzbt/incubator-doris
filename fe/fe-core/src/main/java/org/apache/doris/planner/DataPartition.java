@@ -131,9 +131,6 @@ public class DataPartition {
     public String getExplainString(TExplainLevel explainLevel) {
         StringBuilder str = new StringBuilder();
         str.append(type.toString());
-        if (explainLevel == TExplainLevel.BRIEF) {
-            return str.toString();
-        }
         if (!partitionExprs.isEmpty()) {
             List<String> strings = Lists.newArrayList();
             for (Expr expr : partitionExprs) {

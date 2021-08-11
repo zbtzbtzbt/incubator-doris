@@ -19,15 +19,12 @@ package org.apache.doris.metric;
 
 import com.google.common.collect.Lists;
 
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
-import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 public class DorisMetricRegistry {
 
-    private Collection<Metric> paloMetrics = new PriorityQueue<>(Comparator.comparing(Metric::getName));
+    private List<Metric> paloMetrics = Lists.newArrayList();
 
     public DorisMetricRegistry() {
 

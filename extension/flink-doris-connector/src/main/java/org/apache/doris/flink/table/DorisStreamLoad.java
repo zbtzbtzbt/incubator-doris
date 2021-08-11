@@ -17,7 +17,6 @@
 package org.apache.doris.flink.table;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.doris.flink.exception.StreamLoadException;
 import org.apache.doris.flink.rest.models.RespContent;
 import org.slf4j.Logger;
@@ -32,21 +31,17 @@ import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 import java.util.UUID;
 
 /**
  * DorisStreamLoad
  **/
-public class DorisStreamLoad implements Serializable {
+public class DorisStreamLoad implements Serializable{
 
     private static final Logger LOG = LoggerFactory.getLogger(DorisStreamLoad.class);
 
@@ -59,9 +54,8 @@ public class DorisStreamLoad implements Serializable {
     private String db;
     private String tbl;
     private String authEncoding;
-    private Properties streamLoadProp;
 
-    public DorisStreamLoad(String hostPort, String db, String tbl, String user, String passwd, Properties streamLoadProp) {
+    public DorisStreamLoad(String hostPort, String db, String tbl, String user, String passwd) {
         this.hostPort = hostPort;
         this.db = db;
         this.tbl = tbl;
@@ -69,7 +63,6 @@ public class DorisStreamLoad implements Serializable {
         this.passwd = passwd;
         this.loadUrlStr = String.format(loadUrlPattern, hostPort, db, tbl);
         this.authEncoding = Base64.getEncoder().encodeToString(String.format("%s:%s", user, passwd).getBytes(StandardCharsets.UTF_8));
-        this.streamLoadProp = streamLoadProp;
     }
 
     public String getLoadUrlStr() {
@@ -96,9 +89,6 @@ public class DorisStreamLoad implements Serializable {
         conn.addRequestProperty("Expect", "100-continue");
         conn.addRequestProperty("Content-Type", "text/plain; charset=UTF-8");
         conn.addRequestProperty("label", label);
-        for (Map.Entry<Object, Object> entry : streamLoadProp.entrySet()) {
-            conn.addRequestProperty(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
-        }
         conn.setDoOutput(true);
         conn.setDoInput(true);
         return conn;
@@ -114,7 +104,6 @@ public class DorisStreamLoad implements Serializable {
             this.respMsg = respMsg;
             this.respContent = respContent;
         }
-
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
@@ -127,14 +116,14 @@ public class DorisStreamLoad implements Serializable {
 
     public void load(String value) throws StreamLoadException {
         LoadResponse loadResponse = loadBatch(value);
-        LOG.info("Streamload Response:{}", loadResponse);
-        if (loadResponse.status != 200) {
+        LOG.info("Streamload Response:{}",loadResponse);
+        if(loadResponse.status != 200){
             throw new StreamLoadException("stream load error: " + loadResponse.respContent);
-        } else {
+        }else{
             ObjectMapper obj = new ObjectMapper();
             try {
                 RespContent respContent = obj.readValue(loadResponse.respContent, RespContent.class);
-                if (!DORIS_SUCCESS_STATUS.contains(respContent.getStatus())) {
+                if(!DORIS_SUCCESS_STATUS.contains(respContent.getStatus())){
                     throw new StreamLoadException("stream load error: " + respContent.getMessage());
                 }
             } catch (IOException e) {
@@ -144,13 +133,11 @@ public class DorisStreamLoad implements Serializable {
     }
 
     private LoadResponse loadBatch(String value) {
-        String label = streamLoadProp.getProperty("label");
-        if (StringUtils.isBlank(label)) {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
-            String formatDate = sdf.format(new Date());
-            label = String.format("flink_connector_%s_%s",formatDate,
-                    UUID.randomUUID().toString().replaceAll("-", ""));
-        }
+        Calendar calendar = Calendar.getInstance();
+        String label = String.format("flink_connector_%s%02d%02d_%02d%02d%02d_%s",
+                calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH),
+                calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), calendar.get(Calendar.SECOND),
+                UUID.randomUUID().toString().replaceAll("-", ""));
 
         HttpURLConnection feConn = null;
         HttpURLConnection beConn = null;

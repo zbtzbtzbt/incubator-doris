@@ -20,8 +20,6 @@ package org.apache.doris.catalog;
 import org.apache.doris.alter.SchemaChangeHandler;
 import org.apache.doris.analysis.Expr;
 import org.apache.doris.analysis.SlotRef;
-import org.apache.doris.analysis.StringLiteral;
-import org.apache.doris.common.AnalysisException;
 import org.apache.doris.common.CaseSensibility;
 import org.apache.doris.common.DdlException;
 import org.apache.doris.common.FeMetaVersion;
@@ -31,12 +29,12 @@ import org.apache.doris.persist.gson.GsonUtils;
 import org.apache.doris.thrift.TColumn;
 import org.apache.doris.thrift.TColumnType;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -275,16 +273,6 @@ public class Column implements Writable {
         return this.defaultValue;
     }
 
-    public Expr getDefaultValueExpr() throws AnalysisException {
-        StringLiteral defaultValueLiteral = new StringLiteral(defaultValue);
-        if (getDataType() == PrimitiveType.VARCHAR) {
-            return defaultValueLiteral;
-        }
-        Expr result = defaultValueLiteral.castTo(getType());
-        result.checkValueValid();
-        return result;
-    }
-
     public void setStats(ColumnStats stats) {
         this.stats = stats;
     }
@@ -435,17 +423,6 @@ public class Column implements Writable {
             return colName.substring(SchemaChangeHandler.SHADOW_NAME_PRFIX.length());
         }
         return colName;
-    }
-
-    public static String getShadowName(String colName) {
-        if (isShadowColumn(colName)) {
-            return colName;
-        }
-        return SchemaChangeHandler.SHADOW_NAME_PRFIX + colName;
-    }
-
-    public static boolean isShadowColumn(String colName) {
-        return colName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX);
     }
 
     public Expr getDefineExpr() {

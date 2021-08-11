@@ -115,9 +115,6 @@ public class CancelLoadStmt extends DdlStmt {
                 valid = false;
                 break;
             }
-            if (!isAccurateMatch && !label.contains("%")) {
-                label = "%" + label + "%";
-            }
         } while (false);
 
         if (!valid) {

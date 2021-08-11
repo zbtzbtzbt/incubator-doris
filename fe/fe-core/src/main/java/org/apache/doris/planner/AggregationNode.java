@@ -263,6 +263,7 @@ public class AggregationNode extends PlanNode {
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.AGGREGATION_NODE;
+
         List<TExpr> aggregateFunctions = Lists.newArrayList();
         // only serialize agg exprs that are being materialized
         for (FunctionCallExpr e: aggInfo.getMaterializedAggregateExprs()) {

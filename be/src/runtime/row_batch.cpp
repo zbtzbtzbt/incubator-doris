@@ -25,12 +25,11 @@
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "runtime/tuple_row.h"
+//#include "runtime/mem_tracker.h"
 #include "gen_cpp/Data_types.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/collection_value.h"
-
-//#include "vec/columns/column_vector.h"
-//#include "vec/core/block.h"
+#include "util/debug_util.h"
 
 using std::vector;
 

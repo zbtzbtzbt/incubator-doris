@@ -1061,17 +1061,6 @@ Default：5
 
 Export checker's running interval.
 
-### default_load_parallelism
-
-Default: 1
-
-IsMutable：true
-
-MasterOnly：true
-
-Default parallelism of the broker load execution plan on a single node.
-If the user to set the parallelism when the broker load is submitted, this parameter will be ignored.
-
 ### max_broker_concurrency
 
 Default：10
@@ -1090,7 +1079,7 @@ IsMutable：true
 
 MasterOnly：true
 
-Minimum bytes that a single broker scanner will read.  
+Maximal bytes that a single broker scanner will read.  
 
 ### catalog_trash_expire_second
 

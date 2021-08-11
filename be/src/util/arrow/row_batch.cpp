@@ -217,7 +217,7 @@ public:
                     //char* tmp_val = reinterpret_cast<char*>(0x01);
                     ARROW_RETURN_NOT_OK(builder.Append(""));
                 } else {
-                    ARROW_RETURN_NOT_OK(builder.Append(string_val->ptr, string_val->len));
+                    ARROW_RETURN_NOT_OK(builder.Append(string_val->to_string()));
                 }
                 break;
             }
@@ -230,9 +230,12 @@ public:
                 break;
             }
             case TYPE_LARGEINT: {
-                auto string_temp = LargeIntValue::to_string(
-                        reinterpret_cast<const PackedInt128*>(cell_ptr)->value);
-                ARROW_RETURN_NOT_OK(builder.Append(string_temp.data(), string_temp.size()));
+                char buf[48];
+                int len = 48;
+                char* v = LargeIntValue::to_string(
+                        reinterpret_cast<const PackedInt128*>(cell_ptr)->value, buf, &len);
+                std::string temp(v, len);
+                ARROW_RETURN_NOT_OK(builder.Append(std::move(temp)));
                 break;
             }
             default: {

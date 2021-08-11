@@ -27,14 +27,9 @@ under the License.
 # RESUME ROUTINE LOAD
 ## example
 
-1. Resume routine load job named test1.
+1. Restore the routine import job named test 1.
 
-	RESUME ROUTINE LOAD FOR test1;
-
-2. Resume all paused routine load job.
-
-    RESUME ALL ROUTINE LOAD;
+RESUME ROUTINE LOAD FOR test1;
 
 ## keyword
-
-	RESUME,ALL,ROUTINE,LOAD
+RESUME,ROUTINE,LOAD

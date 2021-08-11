@@ -76,8 +76,7 @@ public enum ExpressionFunctions {
             // 1. Not UDF
             // 2. Not in NonNullResultWithNullParamFunctions
             // 3. Has null parameter
-            if ((fn.getNullableMode() == Function.NullableMode.DEPEND_ON_ARGUMENT
-                    || Catalog.getCurrentCatalog().isNullResultWithOneNullParamFunction(fn.getFunctionName().getFunction()))
+            if (!Catalog.getCurrentCatalog().isNonNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
                     && !fn.isUdf()) {
                 for (Expr e : constExpr.getChildren()) {
                     if (e instanceof NullLiteral) {

@@ -31,11 +31,6 @@ under the License.
 
     RESUME ROUTINE LOAD FOR test1;
 
-2. 恢复所有暂停中的例行导入作业。
-
-    RESUME ALL ROUTINE LOAD;
-
 ## keyword
-
-    RESUME,ALL,ROUTINE,LOAD
+    RESUME,ROUTINE,LOAD
 

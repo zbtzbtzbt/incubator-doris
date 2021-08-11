@@ -48,12 +48,14 @@ struct BloomFilterTraits<Slice> {
 };
 
 struct Int128Comparator {
-    bool operator()(const int128_t& a, const int128_t& b) const { return a < b; }
+    bool operator()(const PackedInt128& a, const PackedInt128& b) const {
+        return a.value < b.value;
+    }
 };
 
 template <>
 struct BloomFilterTraits<int128_t> {
-    using ValueDict = std::set<int128_t, Int128Comparator>;
+    using ValueDict = std::set<PackedInt128, Int128Comparator>;
 };
 
 // Builder for bloom filter. In doris, bloom filter index is used in
@@ -88,9 +90,9 @@ public:
                     _typeinfo->deep_copy(&new_value, v, &_pool);
                     _values.insert(new_value);
                 } else if constexpr (_is_int128()) {
-                    int128_t new_value;
-                    memcpy(&new_value, v, sizeof(PackedInt128));
-                    _values.insert(new_value);
+                    PackedInt128 new_value;
+                    memcpy(&new_value.value, v, sizeof(PackedInt128));
+                    _values.insert((*reinterpret_cast<CppType*>(&new_value)));
                 } else {
                     _values.insert(*v);
                 }
@@ -117,7 +119,6 @@ public:
         _bf_buffer_size += bf->size();
         _bfs.push_back(std::move(bf));
         _values.clear();
-        _has_null = false;
         return Status::OK();
     }
 
