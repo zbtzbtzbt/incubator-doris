@@ -18,9 +18,9 @@
 #include "exprs/string_functions.h"
 
 #include <gtest/gtest.h>
-
 #include <iostream>
 #include <string>
+#include <fmt/os.h>
 
 #include "exprs/anyval_util.h"
 #include "test_util/test_util.h"
@@ -44,13 +44,26 @@ private:
     FunctionContext* ctx;
 };
 
-TEST_F(StringFunctionsTest, do_money_format_bench) {
+TEST_F(StringFunctionsTest, do_money_format_for_bigint_bench) {
     doris_udf::FunctionContext* context = new doris_udf::FunctionContext();
     StringVal expected =
             AnyValUtil::from_string_temp(context, std::string("9,223,372,036,854,775,807.00"));
+    BigIntVal bigIntVal(9223372036854775807);
     for (int i = 0; i < LOOP_LESS_OR_MORE(10, 10000000); i++) {
-        StringVal result =
-                StringFunctions::do_money_format(context, "922337203685477580700"); // cent
+        StringVal result = StringFunctions::money_format(context, bigIntVal);
+        ASSERT_EQ(expected, result);
+    }
+    delete context;
+}
+
+TEST_F(StringFunctionsTest, do_money_format_for_decimalv2_bench) {
+    doris_udf::FunctionContext* context = new doris_udf::FunctionContext();
+    StringVal expected = AnyValUtil::from_string_temp(context, std::string("9,223,372,085.85"));
+    DecimalV2Value dv1(std::string("9223372085.8678"));
+    DecimalV2Val decimalV2Val;
+    dv1.to_decimal_val(&decimalV2Val);
+    for (int i = 0; i < LOOP_LESS_OR_MORE(10, 10000000); i++) {
+        StringVal result = StringFunctions::money_format(context, decimalV2Val);
         ASSERT_EQ(expected, result);
     }
     delete context;
@@ -75,15 +88,16 @@ TEST_F(StringFunctionsTest, money_format_bigint) {
 
 TEST_F(StringFunctionsTest, money_format_large_int) {
     doris_udf::FunctionContext* context = new doris_udf::FunctionContext();
-
-    std::string str("170141183460469231731687303715884105727");
-    std::stringstream ss;
-    ss << str;
-    __int128 value;
-    ss >> value;
+    __int128 value = MAX_INT128;
     StringVal result = StringFunctions::money_format(context, doris_udf::LargeIntVal(value));
     StringVal expected = AnyValUtil::from_string_temp(
             context, std::string("170,141,183,460,469,231,731,687,303,715,884,105,727.00"));
+    ASSERT_EQ(expected, result);
+
+    value = MIN_INT128;
+    result = StringFunctions::money_format(context, doris_udf::LargeIntVal(value));
+    expected = AnyValUtil::from_string_temp(
+                context, std::string("-170,141,183,460,469,231,731,687,303,715,884,105,728.00"));
     ASSERT_EQ(expected, result);
     delete context;
 }
@@ -621,6 +635,25 @@ TEST_F(StringFunctionsTest, bit_length) {
     ASSERT_EQ(IntVal(88), StringFunctions::bit_length(context, StringVal("hello你好")));
 
     delete context;
+}
+
+TEST_F(StringFunctionsTest, lower) {
+    ASSERT_EQ(StringVal("hello"), StringFunctions::lower(ctx, StringVal("hello")));
+    ASSERT_EQ(StringVal("hello"), StringFunctions::lower(ctx, StringVal("HELLO")));
+    ASSERT_EQ(StringVal("hello123"), StringFunctions::lower(ctx, StringVal("HELLO123")));
+    ASSERT_EQ(StringVal("hello, 123"), StringFunctions::lower(ctx, StringVal("HELLO, 123")));
+    ASSERT_EQ(StringVal::null(), StringFunctions::lower(ctx, StringVal::null()));
+    ASSERT_EQ(StringVal(""), StringFunctions::lower(ctx, StringVal("")));
+}
+
+TEST_F(StringFunctionsTest, upper) {
+    // function test
+    ASSERT_EQ(StringVal("HELLO"), StringFunctions::upper(ctx, StringVal("HELLO")));
+    ASSERT_EQ(StringVal("HELLO"), StringFunctions::upper(ctx, StringVal("hello")));
+    ASSERT_EQ(StringVal("HELLO123"), StringFunctions::upper(ctx, StringVal("hello123")));
+    ASSERT_EQ(StringVal("HELLO, 123"), StringFunctions::upper(ctx, StringVal("hello, 123")));
+    ASSERT_EQ(StringVal::null(), StringFunctions::upper(ctx, StringVal::null()));
+    ASSERT_EQ(StringVal(""), StringFunctions::upper(ctx, StringVal("")));
 }
 
 } // namespace doris

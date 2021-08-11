@@ -87,6 +87,15 @@ module.exports = [
             title: "FE",
             directoryPath: "fe/",
             children: [
+                {
+                  title: "MANAGER",
+                  directoryPath: "manager/",
+                  children: [
+                    "cluster-action",
+                    "node-action",
+                    "query-profile-action",
+                  ],
+                },
                 "bootstrap-action",
                 "cancel-load-action",
                 "check-decommission-action",
@@ -181,6 +190,7 @@ module.exports = [
       "outfile",
       "partition_cache",
       "privilege",
+      "ldap",
       "resource-management",
       "running-profile",
       "runtime-filter",
@@ -189,6 +199,7 @@ module.exports = [
       "sql-mode",
       "time-zone",
       "variables",
+      "update",
     ],
     sidebarDepth: 1,
   },
@@ -196,7 +207,9 @@ module.exports = [
     title: "最佳实践",
     directoryPath: "best-practices/",
     children: [
-      "fe-load-balance"
+      "fe-load-balance",
+      "systemd",
+      "samples"
     ],
   },
   {
@@ -210,6 +223,7 @@ module.exports = [
       "plugin-development-manual",
       "spark-doris-connector",
       "flink-doris-connector",
+      "datax",
       {
         title: "UDF",
         directoryPath: "udf/",
@@ -402,6 +416,7 @@ module.exports = [
           },
           "window-function",
           "cast",
+          "digital-masking",
         ],
       },
       {
@@ -436,6 +451,7 @@ module.exports = [
               "ADMIN SHOW CONFIG",
               "ADMIN SHOW REPLICA DISTRIBUTION",
               "ADMIN SHOW REPLICA STATUS",
+              "ADMIN-SHOW-DATA-SKEW",
               "ALTER CLUSTER",
               "ALTER SYSTEM",
               "CANCEL DECOMMISSION",
@@ -447,6 +463,7 @@ module.exports = [
               "INSTALL PLUGIN",
               "LINK DATABASE",
               "MIGRATE DATABASE",
+              "SET LDAP_ADMIN_PASSWORD",
               "SHOW BACKENDS",
               "SHOW BROKER",
               "SHOW FILE",
@@ -456,6 +473,7 @@ module.exports = [
               "SHOW MIGRATIONS",
               "SHOW PLUGINS",
               "SHOW TABLE STATUS",
+              "SHOW TRASH",
               "UNINSTALL PLUGIN",
             ],
           },
@@ -538,6 +556,7 @@ module.exports = [
               "STREAM LOAD",
               "alter-routine-load",
               "insert",
+              "UPDATE",
             ],
           },
           {

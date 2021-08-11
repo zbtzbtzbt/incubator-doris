@@ -29,11 +29,11 @@ import org.apache.doris.backup.RestoreJob;
 import org.apache.doris.catalog.BrokerMgr;
 import org.apache.doris.catalog.Catalog;
 import org.apache.doris.catalog.Database;
+import org.apache.doris.catalog.EncryptKey;
 import org.apache.doris.catalog.EncryptKeyHelper;
+import org.apache.doris.catalog.EncryptKeySearchDesc;
 import org.apache.doris.catalog.Function;
 import org.apache.doris.catalog.FunctionSearchDesc;
-import org.apache.doris.catalog.EncryptKey;
-import org.apache.doris.catalog.EncryptKeySearchDesc;
 import org.apache.doris.catalog.Resource;
 import org.apache.doris.cluster.BaseParam;
 import org.apache.doris.cluster.Cluster;
@@ -59,6 +59,7 @@ import org.apache.doris.load.StreamLoadRecordMgr.FetchStreamLoadRecord;
 import org.apache.doris.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import org.apache.doris.load.loadv2.LoadJobFinalOperation;
 import org.apache.doris.load.routineload.RoutineLoadJob;
+import org.apache.doris.load.sync.SyncJob;
 import org.apache.doris.meta.MetaContext;
 import org.apache.doris.metric.MetricRepo;
 import org.apache.doris.mysql.privilege.UserPropertyInfo;
@@ -485,6 +486,11 @@ public class EditLog {
                     catalog.getAuth().replaySetPassword(privInfo);
                     break;
                 }
+                case OperationType.OP_SET_LDAP_PASSWORD: {
+                    LdapInfo ldapInfo = (LdapInfo) journal.getData();
+                    catalog.getAuth().replaySetLdapPassword(ldapInfo);
+                    break;
+                }
                 case OperationType.OP_CREATE_ROLE: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
                     catalog.getAuth().replayCreateRole(privInfo);
@@ -710,6 +716,16 @@ public class EditLog {
                     catalog.getLoadManager().replayUpdateLoadJobStateInfo(info);
                     break;
                 }
+                case OperationType.OP_CREATE_SYNC_JOB: {
+                    SyncJob syncJob = (SyncJob) journal.getData();
+                    catalog.getSyncJobManager().replayAddSyncJob(syncJob);
+                    break;
+                }
+                case OperationType.OP_UPDATE_SYNC_JOB_STATE: {
+                    SyncJob.SyncJobUpdateStateInfo info = (SyncJob.SyncJobUpdateStateInfo) journal.getData();
+                    catalog.getSyncJobManager().replayUpdateSyncJobState(info);
+                    break;
+                }
                 case OperationType.OP_FETCH_STREAM_LOAD_RECORD: {
                     FetchStreamLoadRecord fetchStreamLoadRecord = (FetchStreamLoadRecord) journal.getData();
                     catalog.getStreamLoadRecordMgr().replayFetchStreamLoadRecord(fetchStreamLoadRecord);
@@ -805,6 +821,11 @@ public class EditLog {
                         default:
                             break;
                     }
+                    break;
+                }
+                case OperationType.OP_MODIFY_COMMENT: {
+                    ModifyCommentOperationLog operation = (ModifyCommentOperationLog) journal.getData();
+                    catalog.getAlterInstance().replayModifyComment(operation);
                     break;
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
@@ -1128,6 +1149,10 @@ public class EditLog {
         logEdit(OperationType.OP_SET_PASSWORD, info);
     }
 
+    public void logSetLdapPassword(LdapInfo info) {
+        logEdit(OperationType.OP_SET_LDAP_PASSWORD, info);
+    }
+
     public void logCreateRole(PrivInfo info) {
         logEdit(OperationType.OP_CREATE_ROLE, info);
     }
@@ -1326,6 +1351,14 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_LOAD_JOB, info);
     }
 
+    public void logCreateSyncJob(SyncJob syncJob) {
+        logEdit(OperationType.OP_CREATE_SYNC_JOB, syncJob);
+    }
+
+    public void logUpdateSyncJobState(SyncJob.SyncJobUpdateStateInfo info) {
+        logEdit(OperationType.OP_UPDATE_SYNC_JOB_STATE, info);
+    }
+
     public void logFetchStreamLoadRecord(FetchStreamLoadRecord fetchStreamLoadRecord) {
         logEdit(OperationType.OP_FETCH_STREAM_LOAD_RECORD, fetchStreamLoadRecord);
     }
@@ -1408,5 +1441,9 @@ public class EditLog {
 
     public void logBatchRemoveTransactions(BatchRemoveTransactionsOperation op) {
         logEdit(OperationType.OP_BATCH_REMOVE_TXNS, op);
+    }
+
+    public void logModifyComment(ModifyCommentOperationLog op) {
+        logEdit(OperationType.OP_MODIFY_COMMENT, op);
     }
 }
