@@ -67,7 +67,7 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 }
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request,
-                                     const QueryFragmentsCtx* fragments_ctx) {
+                                     QueryFragmentsCtx* fragments_ctx) {
     const TPlanFragmentExecParams& params = request.params;
     _query_id = params.query_id;
 
@@ -79,6 +79,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request,
     const TQueryGlobals& query_globals =
             fragments_ctx == nullptr ? request.query_globals : fragments_ctx->query_globals;
     _runtime_state.reset(new RuntimeState(params, request.query_options, query_globals, _exec_env));
+    _runtime_state->set_query_fragments_ctx(fragments_ctx);
 
     RETURN_IF_ERROR(_runtime_state->init_mem_trackers(_query_id));
     _runtime_state->set_be_number(request.backend_num);
@@ -134,8 +135,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request,
                                                      print_id(params.fragment_instance_id),
                                              _exec_env->process_mem_tracker(), true, false, MemTrackerLevel::TASK);
     _runtime_state->set_fragment_mem_tracker(_mem_tracker);
-
-    LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
 
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
 
@@ -239,7 +238,9 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request,
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id="
-              << print_id(_runtime_state->fragment_instance_id());
+              << print_id(_runtime_state->fragment_instance_id())
+              << ", Using query memory limit: "
+              << PrettyPrinter::print(_runtime_state->fragment_mem_tracker()->limit(), TUnit::BYTES);
 
     // we need to start the profile-reporting thread before calling Open(), since it
     // may block
@@ -587,6 +588,7 @@ void PlanFragmentExecutor::close() {
             _runtime_state->runtime_profile()->pretty_print(&ss);
             LOG(INFO) << ss.str();
         }
+		LOG(INFO) << "Close() fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     }
 
     // _mem_tracker init failed

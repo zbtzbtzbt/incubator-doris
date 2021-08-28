@@ -24,8 +24,8 @@ import org.apache.doris.analysis.DropUserStmt;
 import org.apache.doris.analysis.GrantStmt;
 import org.apache.doris.analysis.ResourcePattern;
 import org.apache.doris.analysis.RevokeStmt;
-import org.apache.doris.analysis.SetPassVar;
 import org.apache.doris.analysis.SetLdapPassVar;
+import org.apache.doris.analysis.SetPassVar;
 import org.apache.doris.analysis.SetUserPropertyStmt;
 import org.apache.doris.analysis.TablePattern;
 import org.apache.doris.analysis.UserIdentity;
@@ -1129,6 +1129,24 @@ public class PaloAuth implements Writable {
         readLock();
         try {
             return propertyMgr.getMaxQueryInstances(qualifiedUser);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public String[] getSqlBlockRules(String qualifiedUser) {
+        readLock();
+        try {
+            return propertyMgr.getSqlBlockRules(qualifiedUser);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public int getCpuResourceLimit(String qualifiedUser) {
+        readLock();
+        try {
+            return propertyMgr.getCpuResourceLimit(qualifiedUser);
         } finally {
             readUnlock();
         }

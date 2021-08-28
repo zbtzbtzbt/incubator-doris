@@ -32,13 +32,13 @@ import org.apache.doris.common.io.Writable;
 import org.apache.doris.load.DppConfig;
 import org.apache.doris.system.SystemInfoService;
 
+import org.apache.commons.lang.StringUtils;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-
-import org.apache.commons.lang.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -57,15 +57,14 @@ import java.util.regex.Pattern;
  */
 public class UserProperty implements Writable {
 
-    // common properties
     private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
-    private static final String PROP_MAX_QUERY_INSTANCES = "max_query_instances";
-    // common properties end
-
     private static final String PROP_RESOURCE = "resource";
+    private static final String PROP_LOAD_CLUSTER = "load_cluster";
     private static final String PROP_QUOTA = "quota";
     private static final String PROP_DEFAULT_LOAD_CLUSTER = "default_load_cluster";
-    private static final String PROP_LOAD_CLUSTER = "load_cluster";
+    private static final String PROP_SQL_BLOCK_RULES = "sql_block_rules";
+    private static final String PROP_MAX_QUERY_INSTANCES = "max_query_instances";
+    private static final String PROP_CPU_RESOURCE_LIMIT = "cpu_resource_limit";
 
     // for system user
     public static final Set<Pattern> ADVANCED_PROPERTIES = Sets.newHashSet();
@@ -95,6 +94,8 @@ public class UserProperty implements Writable {
         ADVANCED_PROPERTIES.add(Pattern.compile("^" + PROP_LOAD_CLUSTER + "." + DppConfig.CLUSTER_NAME_REGEX + "."
                 + DppConfig.PRIORITY + "$", Pattern.CASE_INSENSITIVE));
         ADVANCED_PROPERTIES.add(Pattern.compile("^" + PROP_MAX_QUERY_INSTANCES + "$", Pattern.CASE_INSENSITIVE));
+        ADVANCED_PROPERTIES.add(Pattern.compile("^" + PROP_SQL_BLOCK_RULES + "$", Pattern.CASE_INSENSITIVE));
+        ADVANCED_PROPERTIES.add(Pattern.compile("^" + PROP_CPU_RESOURCE_LIMIT + "$", Pattern.CASE_INSENSITIVE));
 
         COMMON_PROPERTIES.add(Pattern.compile("^" + PROP_QUOTA + ".", Pattern.CASE_INSENSITIVE));
         COMMON_PROPERTIES.add(Pattern.compile("^" + PROP_DEFAULT_LOAD_CLUSTER + "$", Pattern.CASE_INSENSITIVE));
@@ -121,6 +122,14 @@ public class UserProperty implements Writable {
         return commonProperties.getMaxQueryInstances();// maxQueryInstances;
     }
 
+    public String[] getSqlBlockRules() {
+        return commonProperties.getSqlBlockRulesSplit();
+    }
+
+    public int getCpuResourceLimit() {
+        return commonProperties.getCpuResourceLimit();
+    }
+
     public WhiteList getWhiteList() {
         return whiteList;
     }
@@ -143,6 +152,9 @@ public class UserProperty implements Writable {
         // copy
         long newMaxConn = this.commonProperties.getMaxConn();
         long newMaxQueryInstances = this.commonProperties.getMaxQueryInstances();
+        String sqlBlockRules = this.commonProperties.getSqlBlockRules();
+        int cpuResourceLimit = this.commonProperties.getCpuResourceLimit();
+
         UserResource newResource = resource.getCopiedUserResource();
         String newDefaultLoadCluster = defaultLoadCluster;
         Map<String, DppConfig> newDppConfigs = Maps.newHashMap(clusterToDppConfig);
@@ -227,6 +239,29 @@ public class UserProperty implements Writable {
                 } catch (NumberFormatException e) {
                     throw new DdlException(PROP_MAX_QUERY_INSTANCES + " is not number");
                 }
+            } else if (keyArr[0].equalsIgnoreCase(PROP_SQL_BLOCK_RULES)) {
+                // set property "sql_block_rules" = "test_rule1,test_rule2"
+                if (keyArr.length != 1) {
+                    throw new DdlException(PROP_SQL_BLOCK_RULES + " format error");
+                }
+                sqlBlockRules = value;
+            } else if (keyArr[0].equalsIgnoreCase(PROP_CPU_RESOURCE_LIMIT)) {
+                // set property "cpu_resource_limit" = "2";
+                if (keyArr.length != 1) {
+                    throw new DdlException(PROP_CPU_RESOURCE_LIMIT + " format error");
+                }
+                int limit = -1;
+                try {
+                    limit = Integer.parseInt(value);
+                } catch (NumberFormatException e) {
+                    throw new DdlException(key + " is not number");
+                }
+
+                if (limit <= 0) {
+                    throw new DdlException(key + " is not valid");
+                }
+
+                cpuResourceLimit = limit;
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -235,6 +270,9 @@ public class UserProperty implements Writable {
         // set
         this.commonProperties.setMaxConn(newMaxConn);
         this.commonProperties.setMaxQueryInstances(newMaxQueryInstances);
+        this.commonProperties.setSqlBlockRules(sqlBlockRules);
+        this.commonProperties.setCpuResourceLimit(cpuResourceLimit);
+
         resource = newResource;
         if (newDppConfigs.containsKey(newDefaultLoadCluster)) {
             defaultLoadCluster = newDefaultLoadCluster;
@@ -322,6 +360,12 @@ public class UserProperty implements Writable {
         // max query instance
         result.add(Lists.newArrayList(PROP_MAX_QUERY_INSTANCES, String.valueOf(commonProperties.getMaxQueryInstances())));
 
+        // sql block rules
+        result.add(Lists.newArrayList(PROP_SQL_BLOCK_RULES, commonProperties.getSqlBlockRules()));
+
+        // cpu resource limit
+        result.add(Lists.newArrayList(PROP_CPU_RESOURCE_LIMIT, String.valueOf(commonProperties.getCpuResourceLimit())));
+
         // resource
         ResourceGroup group = resource.getResource();
         for (Map.Entry<ResourceType, Integer> entry : group.getQuotaMap().entrySet()) {
@@ -397,9 +441,7 @@ public class UserProperty implements Writable {
         userProperty.readFields(in);
         return userProperty;
     }
-
-
-
+    
     @Override
     public void write(DataOutput out) throws IOException {
         // user name
@@ -433,7 +475,7 @@ public class UserProperty implements Writable {
             // consume the flag of empty user name
             in.readBoolean();
         }
-            
+        
         // user name
         if (Catalog.getCurrentCatalogJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
