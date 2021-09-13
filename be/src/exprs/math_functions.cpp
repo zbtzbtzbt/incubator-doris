@@ -319,6 +319,18 @@ StringVal MathFunctions::bin(FunctionContext* ctx, const BigIntVal& v) {
     return AnyValUtil::from_buffer_temp(ctx, result + index, max_bits - index);
 }
 
+Stringval MathFunction::ipv4_num_to_string(doris_udf::FunctionContext* ctx,
+                                          const doris_udf::BigIntVal& ipv4_num){
+    // ipv4_num range [0,4294967295]
+    // if ipv4_num is out of range
+    if (ipv4_num < 0 || ipv4_num > 4294967295) {
+        return StringVal::null();
+    }
+    std::stringstream ss;
+    // TODO: Implement ipv4_num_to_string algorithm
+    return AnyValUtil::from_string_temp(ctx, ss.str());
+}
+
 StringVal MathFunctions::hex_int(FunctionContext* ctx, const BigIntVal& v) {
     if (v.is_null) {
         return StringVal::null();

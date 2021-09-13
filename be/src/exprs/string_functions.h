@@ -81,6 +81,11 @@ public:
                                       const doris_udf::StringVal& str);
     static doris_udf::StringVal upper(doris_udf::FunctionContext* context,
                                       const doris_udf::StringVal& str);
+    // INET_ATON('255.255.255.255') = 4294967295.
+    // only BigIntVal can contain it.
+    static doris_udf::BigIntVal ipv4_string_to_num(doris_udf::FunctionContext* context,
+                                          const doris_udf::StringVal& str);
+
     static doris_udf::StringVal reverse(doris_udf::FunctionContext* context,
                                         const doris_udf::StringVal& str);
     static doris_udf::StringVal trim(doris_udf::FunctionContext* context,

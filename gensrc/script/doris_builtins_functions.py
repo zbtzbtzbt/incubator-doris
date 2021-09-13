@@ -630,6 +630,13 @@ visible_functions = [
 
     [['bin'], 'VARCHAR', ['BIGINT'],
             '_ZN5doris13MathFunctions3binEPN9doris_udf15FunctionContextERKNS1_9BigIntValE', '', '', '', ''],
+
+    [['ipv4_string_to_num'], 'VARCHAR', ['BIGINT'],
+     '__fill the blank(1)__', '', '', '', ''],
+
+    [['ipv4_num_to_string'], 'BIGINT', ['VARCHAR'],
+     '__fill the blank(2)__', '', '', '', ''],
+
     [['hex'], 'VARCHAR', ['BIGINT'],
             '_ZN5doris13MathFunctions7hex_intEPN9doris_udf15FunctionContextERKNS1_9BigIntValE', '', '', '', ''],
     [['hex'], 'VARCHAR', ['VARCHAR'],

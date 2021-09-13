@@ -98,6 +98,10 @@ public:
     static void rand_close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope);
 
     static doris_udf::StringVal bin(doris_udf::FunctionContext* ctx, const doris_udf::BigIntVal& v);
+    
+    static doris_udf::BigIntVal ipv4_num_to_string(doris_udf::FunctionContext* ctx,
+                                                  const doris_udf::BigIntVal& ipv4_num);
+    
     static doris_udf::StringVal hex_int(doris_udf::FunctionContext* ctx,
                                         const doris_udf::BigIntVal& v);
     static doris_udf::StringVal hex_string(doris_udf::FunctionContext* ctx,

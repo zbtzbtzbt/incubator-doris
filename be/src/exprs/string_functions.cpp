@@ -995,4 +995,15 @@ IntVal StringFunctions::bit_length(FunctionContext* context, const StringVal& st
     }
     return IntVal(str.len * 8);
 }
+
+BigIntVal StringFunctions::ipv4_string_to_num(doris_udf::FunctionContext* context,
+                                              const doris_udf::StringVal& ipv4_str){
+    // if ipv4_str is illegal
+    // return BigIntVal(0);
+    
+    // Todo Implement ipv4_string_to_num algorithm
+    // default value
+    return BigIntVal(2021913);
+}
+
 } // namespace doris
