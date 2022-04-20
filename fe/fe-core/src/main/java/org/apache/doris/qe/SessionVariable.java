@@ -164,6 +164,9 @@ public class SessionVariable implements Serializable, Writable {
 
     public static final String ENABLE_VECTORIZED_ENGINE = "enable_vectorized_engine";
 
+    // configure HyperLogLog error rate
+    public static final String HYPERLOGLOG_TYPE = "hyperloglog_type";
+
     public static final String CPU_RESOURCE_LIMIT = "cpu_resource_limit";
     
     public static final String ENABLE_PARALLEL_OUTFILE = "enable_parallel_outfile";
@@ -407,6 +410,9 @@ public class SessionVariable implements Serializable, Writable {
     private int runtimeFilterType = 8;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_MAX_IN_NUM)
     private int runtimeFilterMaxInNum = 1024;
+    // default HyperLogLog is HLL(14) which error rate is 2.44%
+    @VariableMgr.VarAttr(name = HYPERLOGLOG_TYPE)
+    private int hyperLogLogType = 14;
     @VariableMgr.VarAttr(name = ENABLE_VECTORIZED_ENGINE)
     public boolean enableVectorizedEngine = false;
     @VariableMgr.VarAttr(name = ENABLE_PARALLEL_OUTFILE)
@@ -820,6 +826,14 @@ public class SessionVariable implements Serializable, Writable {
         this.enableVectorizedEngine = enableVectorizedEngine;
     }
 
+    public void setHyperLogLogType(int hyperLogLogType){
+        this.hyperLogLogType = hyperLogLogType;
+    }
+
+    public int getHyperLogLogType(){
+        return hyperLogLogType;
+    }
+
     public long getInsertVisibleTimeoutMs() {
         if (insertVisibleTimeoutMs < MIN_INSERT_VISIBLE_TIMEOUT_MS) {
             return MIN_INSERT_VISIBLE_TIMEOUT_MS;
@@ -926,6 +940,7 @@ public class SessionVariable implements Serializable, Writable {
         tResult.setIsReportSuccess(enableProfile);
         tResult.setCodegenLevel(codegenLevel);
         tResult.setEnableVectorizedEngine(enableVectorizedEngine);
+        tResult.setHyperLogLogType(hyperLogLogType);
         tResult.setReturnObjectDataAsBinary(returnObjectDataAsBinary);
 
         tResult.setBatchSize(batchSize);

@@ -35,12 +35,12 @@
 namespace doris {
 
 struct Slice;
-
-const static int HLL_COLUMN_PRECISION = 14;
+// Doris 里面采用的是HLL(14)
+const static int HLL_COLUMN_PRECISION = 14;// 后14位的二进制数 => 十进制的结果，是桶号,2^14个桶
 const static int HLL_ZERO_COUNT_BITS = (64 - HLL_COLUMN_PRECISION);
 const static int HLL_EXPLICIT_INT64_NUM = 160;
 const static int HLL_SPARSE_THRESHOLD = 4096;
-const static int HLL_REGISTERS_COUNT = 16 * 1024;
+const static int HLL_REGISTERS_COUNT = 16 * 1024;//2^14
 // maximum size in byte of serialized HLL: type(1) + registers (2^14)
 const static int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;
 
@@ -50,8 +50,10 @@ const static int HLL_EMPTY_SIZE = 1;
 
 // Hyperloglog distinct estimate algorithm.
 // See these papers for more details.
+// paper link: http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
 // 1) Hyperloglog: The analysis of a near-optimal cardinality estimation
 // algorithm (2007)
+// paper link: https://static.googleusercontent.com/media/research.google.com/zh-CN//pubs/archive/40671.pdf
 // 2) HyperLogLog in Practice (paper from google with some improvements)
 
 // Each HLL value is a set of values. To save space, Doris store HLL value

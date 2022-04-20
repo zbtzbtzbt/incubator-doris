@@ -703,6 +703,13 @@ struct TAssertNumRowsNode {
     3: optional TAssertion assertion;
 }
 
+enum THyperLogLogType{
+  HLL_10 = 10
+  HLL_12 = 12
+  HLL_14 = 14
+  HLL_16 = 16
+}
+
 enum TRuntimeFilterType {
   IN = 1
   BLOOM = 2
