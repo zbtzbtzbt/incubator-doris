@@ -324,6 +324,8 @@ public:
 
     bool enable_vectorized_exec() const { return _query_options.enable_vectorized_engine; }
 
+    int hyperloglog_type() const { return _query_options.hyperloglog_type; }
+
     bool return_object_data_as_binary() const {
         return _query_options.return_object_data_as_binary;
     }

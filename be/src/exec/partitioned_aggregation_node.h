@@ -117,6 +117,7 @@ class SlotDescriptor;
 /// TODO: support an Init() method with an initial value in the UDAF interface.
 class PartitionedAggregationNode : public ExecNode {
 public:
+    
     PartitionedAggregationNode(ObjectPool* pool, const TPlanNode& tnode,
                                const DescriptorTbl& descs);
 

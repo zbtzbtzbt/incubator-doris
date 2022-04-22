@@ -802,6 +802,8 @@ struct TPlanNode {
 
   // output column
   42: optional list<Types.TSlotId> output_slot_ids
+
+  43: required THyperLogLogType hll_type
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

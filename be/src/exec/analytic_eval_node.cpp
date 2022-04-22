@@ -28,6 +28,7 @@ namespace doris {
 
 using doris_udf::BigIntVal;
 
+
 AnalyticEvalNode::AnalyticEvalNode(ObjectPool* pool, const TPlanNode& tnode,
                                    const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),

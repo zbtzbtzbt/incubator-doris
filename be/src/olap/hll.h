@@ -36,13 +36,13 @@ namespace doris {
 
 struct Slice;
 // Doris 里面采用的是HLL(14)
-const static int HLL_COLUMN_PRECISION = 14;// 后14位的二进制数 => 十进制的结果，是桶号,2^14个桶
+const static int HLL_COLUMN_PRECISION = 14;// 【后14位的二进制数 => 十进制的结果，是桶号,2^14个桶】
 const static int HLL_ZERO_COUNT_BITS = (64 - HLL_COLUMN_PRECISION);
 const static int HLL_EXPLICIT_INT64_NUM = 160;
 const static int HLL_SPARSE_THRESHOLD = 4096;
-const static int HLL_REGISTERS_COUNT = 16 * 1024;//2^14
+const static int HLL_REGISTERS_COUNT = 16 * 1024;//【2^14】
 // maximum size in byte of serialized HLL: type(1) + registers (2^14)
-const static int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;
+const static int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;// 不用改
 
 // 1 for type; 1 for hash values count; 8 for hash value
 const static int HLL_SINGLE_VALUE_SIZE = 10;
@@ -271,6 +271,7 @@ public:
 
 private:
     HllDataType _type = HLL_DATA_EMPTY;
+    THyperLogLogType _hll_error_rate;
     phmap::flat_hash_set<uint64_t> _hash_set;
 
     // This field is much space consuming(HLL_REGISTERS_COUNT), we create
