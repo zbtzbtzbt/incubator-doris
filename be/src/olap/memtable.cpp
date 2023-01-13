@@ -170,21 +170,30 @@ void MemTable::insert(const vectorized::Block* input_block, const std::vector<in
     size_t input_size = target_block.allocated_bytes() * num_rows / target_block.rows();
     _mem_usage += input_size;
     _insert_mem_tracker->consume(input_size);
-    for (int i = 0; i < num_rows; i++) {
-        _row_in_blocks.emplace_back(new RowInBlock {cursor_in_mutableblock + i});
-        _insert_one_row_from_block(_row_in_blocks.back());
+    if (_keys_type == KeysType::DUP_KEYS) {
+        for (int i = 0; i < num_rows; i++) {
+            _row_in_blocks.emplace_back(new RowInBlock {cursor_in_mutableblock + i});
+            _insert_one_row_for_dup(_row_in_blocks.back());
+        }
+    }else{
+        for (int i = 0; i < num_rows; i++) {
+            _row_in_blocks.emplace_back(new RowInBlock {cursor_in_mutableblock + i});
+            _insert_one_row_for_agg(_row_in_blocks.back());
+        }
     }
 }
 
-void MemTable::_insert_one_row_from_block(RowInBlock* row_in_block) {
+void MemTable::_insert_one_row_for_dup(RowInBlock* row_in_block) {
     _rows++;
     bool overwritten = false;
-    if (_keys_type == KeysType::DUP_KEYS) {
-        // TODO: dup keys only need sort opertaion. Rethink skiplist is the beat way to sort columns?
-        _vec_skip_list->Insert(row_in_block, &overwritten);
-        DCHECK(!overwritten) << "Duplicate key model meet overwrite in SkipList";
-        return;
-    }
+    // TODO: dup keys only need sort opertaion. Rethink skiplist is the beat way to sort columns?
+    _vec_skip_list->Insert(row_in_block, &overwritten);
+    DCHECK(!overwritten) << "Duplicate key model meet overwrite in SkipList";
+    return;
+}
+
+void MemTable::_insert_one_row_for_agg(RowInBlock* row_in_block) {
+    _rows++;
 
     bool is_exist = _vec_skip_list->Find(row_in_block, &_vec_hint);
     if (is_exist) {

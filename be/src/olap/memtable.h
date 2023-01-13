@@ -107,7 +107,8 @@ private:
 
 private:
     // for vectorized
-    void _insert_one_row_from_block(RowInBlock* row_in_block);
+    void _insert_one_row_for_dup(RowInBlock* row_in_block);
+    void _insert_one_row_for_agg(RowInBlock* row_in_block);
     void _aggregate_two_row_in_block(RowInBlock* new_row, RowInBlock* row_in_skiplist);
 
     Status _generate_delete_bitmap(int64_t atomic_num_segments_before_flush,
